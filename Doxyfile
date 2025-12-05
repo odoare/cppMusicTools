@@ -1,0 +1,34 @@
+# Doxyfile configuration for cppMusicTools
+
+# Project settings
+PROJECT_NAME           = "cppMusicTools"
+PROJECT_NUMBER         = 1.0.0
+PROJECT_BRIEF          = "C++ Tools for MIDI and Music Development"
+OUTPUT_DIRECTORY       = "docs"
+
+# Input files
+INPUT                  = .
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */docs/*
+
+# Language settings
+OPTIMIZE_OUTPUT_FOR_C  = NO
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+
+# Output formats
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+
+GENERATE_LATEX         = YES
+LATEX_OUTPUT           = latex
+LATEX_CMD_NAME         = pdflatex
+USE_PDFLATEX           = YES
+
+# Diagrams and Graphs (requires 'dot' from Graphviz)
+HAVE_DOT               = YES
+UML_LOOK               = YES
+UML_LIMIT_NUM_FIELDS   = 10
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
