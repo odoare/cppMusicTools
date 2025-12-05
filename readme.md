@@ -2,6 +2,14 @@
 
 A collection of C++ tools for MIDI and music development, built with the JUCE framework.
 
+## MidiTools
+
+A namespace containing a Chord class and a suite of utility functions for handling MIDI notes and chords.
+
+### The Chord Class
+
+The Chord class represents a musical chord. It can be constructed from a string like "Am7" or "F#M" and provides methods to access its constituent notes (degrees).
+
 ## Arpeggiator
 
 The `Arpeggiator` class is a base for creating MIDI arpeggiators. It takes a `Chord`, an octave, and a pattern string to generate a sequence of MIDI notes.
@@ -33,21 +41,3 @@ Octave modifiers are prefixed to a note command to change the octave for that st
 - **`o+`**: Increases the octave by one. Example: `"o+0"` plays the root one octave higher.
 - **`o-`**: Decreases the octave by one. Example: `"o-0"` plays the root one octave lower.
 
-### Basic Usage
-
-```cpp
-#include "Arpeggiator.h"
-
-void setup()
-{
-    // Define a C Major chord (Root at C4 = MIDI note 60)
-    MidiTools::Chord cMajor({60, 64, 67}); // C, E, G
-
-    // Create an arpeggiator with a pattern
-    Arpeggiator arp(cMajor, "0121", 4); // Arpeggiate root, third, fifth, third
-
-    // Prepare for playback
-    arp.prepareToPlay(44100.0); // Set sample rate
-    arp.setTempo(120.0);
-}
-```
