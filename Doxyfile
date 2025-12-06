@@ -2,7 +2,7 @@
 
 # Project settings
 PROJECT_NAME           = "cppMusicTools"
-PROJECT_NUMBER         = 1.0.0
+PROJECT_NUMBER         = 0.1.0
 PROJECT_BRIEF          = "C++ Tools for MIDI and Music Development"
 OUTPUT_DIRECTORY       = "docs"
 

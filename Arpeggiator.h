@@ -107,7 +107,7 @@ public:
             time += samplesThisStep;
             samplesUntilNextNote -= samplesThisStep;
         }
-        std::cout << "Num events = " << generatedMidi.getNumEvents() << std::endl;
+        // std::cout << "Num events = " << generatedMidi.getNumEvents() << std::endl;
         return generatedMidi;
     }
 
@@ -128,7 +128,7 @@ private:
         // We check the upcoming character at the current `pos` to see if it's a sustain command.
         if (lastPlayedMidiNote != -1 && pattern[pos] != '_')
         {
-            std::cout << "     Should turn off previous note" << std::endl;
+            // std::cout << "     Should turn off previous note" << std::endl;
             midiBuffer.addEvent(juce::MidiMessage::noteOff(1, lastPlayedMidiNote), samplePosition);
             lastPlayedMidiNote = -1;
         }
@@ -188,7 +188,7 @@ private:
             // std::cout << "currentDegreeIndex = " << currentDegreeIndex << std::endl;
 
             int semitone = getSemitoneForDegree(currentDegreeIndex);
-            std::cout << "     semitone = " << semitone << std::endl;
+            // std::cout << "     semitone = " << semitone << std::endl;
 
             if (semitone != -1)
             {
@@ -204,8 +204,8 @@ private:
             lastPlayedDegreeIndex = currentDegreeIndex;
         }
 
-        std::cout << "     noteToplay = " << noteToPlay << std::endl;
-        std::cout << "     Num events = " << midiBuffer.getNumEvents() << std::endl;
+        // std::cout << "     noteToplay = " << noteToPlay << std::endl;
+        // std::cout << "     Num events = " << midiBuffer.getNumEvents() << std::endl;
 
         return midiBuffer;
     }
