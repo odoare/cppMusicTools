@@ -44,6 +44,15 @@ class Arpeggiator
 {
 public:
     /**
+        Default constructor.
+        Initializes with a default C Major chord, a simple pattern, and a base octave.
+    */
+    Arpeggiator()
+        : chord(MidiTools::Chord("CM")), pattern("012"), octave(baseOctave)
+    {
+    }
+public:
+    /**
         Constructs an Arpeggiator.
         @param initialChord The chord to be arpeggiated.
         @param arpPattern The string pattern defining the arpeggio.
