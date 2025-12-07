@@ -150,6 +150,26 @@ namespace MidiTools
             return -1;
         }
 
+        /**
+            Sets the chord's degrees directly from an array of semitones.
+            This is useful for defining a chord from played notes rather than a name.
+            The degrees are assigned in the order they appear in the input array.
+            @param semitones An array of semitones (0-11). Duplicates will be ignored.
+        */
+        void setDegreesByArray(const juce::Array<int>& semitones)
+        {
+            name = "Custom";
+            degrees.clear();
+            degrees.insertMultiple(0, -1, 7); // Reset to 7 absent degrees
+
+            juce::SortedSet<int> uniqueSemitones;
+            for (int note : semitones)
+                uniqueSemitones.add(note % 12);
+
+            for (int i = 0; i < juce::jmin(7, uniqueSemitones.size()); ++i)
+                degrees.set(i, uniqueSemitones.getUnchecked(i));
+        }
+
         /** Returns a SortedSet of the present semitones (0-11) in the chord.
             This is useful for checking against a collection of played MIDI notes
             where order and octave do not matter.
