@@ -236,6 +236,11 @@ public:
         updateSamplesPerNote();
     }
 
+    void setSubdivision(int subdivisionIndex)
+    {
+        subdivision = subdivisionIndex;
+        updateSamplesPerNote();
+    }
     /**
         Synchronizes the arpeggiator's internal clock to the host's transport position.
         This should be called on every process block while the host is playing.
@@ -247,19 +252,19 @@ public:
             return;
 
         // Calculate the host's position in terms of 16th notes.
-        // A quarter note (ppq) contains four 16th notes.
-        const double sixteenths_per_quarter_note = 4.0;
-        const double positionInSixteenths = positionInfo.ppqPosition * sixteenths_per_quarter_note;
+        // A quarter note (ppq) contains `noteDivisor` number of notes.
+        const double notesPerQuarter = getNoteDivisor();
+        const double positionInNotes = positionInfo.ppqPosition * notesPerQuarter;
 
         // Find the position of the *next* 16th note.
-        const double nextSixteenthPosition = std::ceil(positionInSixteenths);
+        const double nextNotePosition = std::ceil(positionInNotes);
 
         // Calculate the distance (in 16th notes) to the next grid line.
-        const double sixteenthsUntilNextNote = nextSixteenthPosition - positionInSixteenths;
+        const double notesUntilNext = nextNotePosition - positionInNotes;
 
         // Convert that distance into samples.
         // samplesPerNote is the duration of one 16th note in samples.
-        samplesUntilNextNote = sixteenthsUntilNextNote * samplesPerNote;
+        samplesUntilNextNote = notesUntilNext * samplesPerNote;
     }
 
     /** Resets the arpeggiator's position to the beginning of the pattern. */
@@ -361,17 +366,34 @@ protected:
     int lastPlayedMidiNote = -1;
     int lastPlayedDegreeIndex = 0;
 private:
+    double getNoteDivisor() const
+    {
+        switch (subdivision)
+        {
+            case 0: return 1.0;  // 1/4
+            case 1: return 1.5;  // 1/4T
+            case 2: return 2.0;  // 1/8
+            case 3: return 3.0;  // 1/8T
+            case 4: return 4.0;  // 1/16
+            case 5: return 6.0;  // 1/16T
+            case 6: return 8.0;  // 1/32
+            case 7: return 12.0; // 1/32T
+            default: return 4.0;
+        }
+    }
+
     void updateSamplesPerNote()
     {
         if (sampleRate > 0 && tempoBPM > 0)
         {
-            // Arpeggiator runs at 16th notes
+            const double noteDivisor = getNoteDivisor();
             double quarterNoteDurationSeconds = 60.0 / tempoBPM;
-            samplesPerNote = sampleRate * quarterNoteDurationSeconds / 4.0;
+            samplesPerNote = sampleRate * quarterNoteDurationSeconds / noteDivisor;
         }
     }
     double sampleRate = 0.0;
     double tempoBPM = 120.0;
+    int subdivision = 4; // Default to 1/16
     double samplesPerNote = 0.0;
     double samplesUntilNextNote = 0.0;
 };
