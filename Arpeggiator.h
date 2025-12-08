@@ -133,14 +133,6 @@ private:
         if (pattern.isEmpty())
             return midiBuffer;
 
-        // --- 1. Turn off the previous note if it's not being sustained ---
-        // We check the upcoming character at the current `pos` to see if it's a sustain command.
-        if (lastPlayedMidiNote != -1 && pattern[pos] != '_')
-        {
-            // std::cout << "     Should turn off previous note" << std::endl;
-            midiBuffer.addEvent(juce::MidiMessage::noteOff(1, lastPlayedMidiNote), samplePosition);
-            lastPlayedMidiNote = -1;
-        }
 
         // --- 2. Parse the pattern using a robust loop ---
         int noteToPlay = -1;
@@ -154,6 +146,11 @@ private:
             char command = pattern[pos];
             pos = (pos + 1) % pattern.length(); // Consume character
 
+            // If sustain, do nothing and exit immediately. The previous note will continue playing.
+            if (command == '_')
+            {
+                return midiBuffer; // Return an empty buffer, sustaining the note.
+            }
             if (command == 'o') // Octave prefix
             {
                 char octaveCommand = pattern[pos];
@@ -181,13 +178,22 @@ private:
                     case '#': currentDegreeIndex = (currentDegreeIndex + 2) % 7; break;
                     case '=': currentDegreeIndex = (currentDegreeIndex + 5) % 7; break;
                     case '*': currentDegreeIndex = getRandomPresentDegree(); break;
-                    case '"': /* currentDegreeIndex remains the same */ break;
+                    case '"': /* currentDegreeIndex remains the same as lastPlayedDegreeIndex */ break;
                     case '.': currentDegreeIndex = -1; /* Rest */ break;
-                    case '_': noteToPlay = lastPlayedMidiNote; /* Sustain */ break;
-                    default:  currentDegreeIndex = -1; /* Invalid char = rest */ break;
+                    default:  // Invalid characters are ignored.
+                        noteCommandFound = false; // Ensure we continue the loop
+                        continue; // Skip to the next character in the pattern.
                 }
                 noteCommandFound = true;
             }
+        }
+
+        // --- Turn off the previous note ---
+        // This now happens *after* we've decided what the next command is.
+        if (lastPlayedMidiNote != -1)
+        {
+            midiBuffer.addEvent(juce::MidiMessage::noteOff(1, lastPlayedMidiNote), samplePosition);
+            lastPlayedMidiNote = -1;
         }
 
         // --- 3. Determine the final MIDI note to play ---
@@ -206,7 +212,7 @@ private:
         }
         
         // --- 4. Generate MIDI event ---
-        if (noteToPlay != -1)
+        if (noteToPlay != -1 )
         {
             midiBuffer.addEvent(juce::MidiMessage::noteOn(1, noteToPlay, (juce::uint8)100), samplePosition);
             lastPlayedMidiNote = noteToPlay;
@@ -228,6 +234,32 @@ public:
     {
         tempoBPM = newTempoBPM > 0 ? newTempoBPM : 120.0;
         updateSamplesPerNote();
+    }
+
+    /**
+        Synchronizes the arpeggiator's internal clock to the host's transport position.
+        This should be called on every process block while the host is playing.
+        @param positionInfo The host's current position information.
+    */
+    void syncToPlayHead(const juce::AudioPlayHead::CurrentPositionInfo& positionInfo)
+    {
+        if (samplesPerNote <= 0.0 || positionInfo.ppqPosition < 0.0)
+            return;
+
+        // Calculate the host's position in terms of 16th notes.
+        // A quarter note (ppq) contains four 16th notes.
+        const double sixteenths_per_quarter_note = 4.0;
+        const double positionInSixteenths = positionInfo.ppqPosition * sixteenths_per_quarter_note;
+
+        // Find the position of the *next* 16th note.
+        const double nextSixteenthPosition = std::ceil(positionInSixteenths);
+
+        // Calculate the distance (in 16th notes) to the next grid line.
+        const double sixteenthsUntilNextNote = nextSixteenthPosition - positionInSixteenths;
+
+        // Convert that distance into samples.
+        // samplesPerNote is the duration of one 16th note in samples.
+        samplesUntilNextNote = sixteenthsUntilNextNote * samplesPerNote;
     }
 
     /** Resets the arpeggiator's position to the beginning of the pattern. */
@@ -256,6 +288,19 @@ protected:
     {
         if (!juce::isPositiveAndBelow(degreeIndex, 7))
             return -1;
+
+        // If we are using a "Custom" chord from played notes, we should loop within the number of notes played.
+        if (chord.getName() == "Custom")
+        {
+            juce::SortedSet<int> playedNotes = chord.getSortedSet();
+            int numPlayedNotes = playedNotes.size();
+
+            if (numPlayedNotes > 0)
+            {
+                // Use modulo to wrap the degree index around the number of notes being held.
+                return playedNotes[degreeIndex % numPlayedNotes];
+            }
+        }
 
         int semitone = chord.getDegree(degreeIndex);
 
