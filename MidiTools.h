@@ -140,6 +140,9 @@ namespace MidiTools
         const juce::String& getName() const { return name; }
 
         /** Gets the semitone value of a specific degree of the chord.
+         *  This is primarily for named chords (e.g. "CM7") where degrees have musical meaning.
+         *  For chords set by raw notes, this will reflect the semitone of the Nth note in the sorted array.
+         *
             @param degreeIndex The index of the degree (0=fundamental, 1=third, etc.).
             @return The semitone value (0-11), or -1 if the degree is absent or the index is invalid.
         */
@@ -152,7 +155,8 @@ namespace MidiTools
 
         /**
             Sets the chord's degrees directly from an array of semitones.
-            This is useful for defining a chord from played notes rather than a name.
+            This is for the "Notes Played" mode. It converts MIDI notes to unique, octave-less
+            semitones and assigns them to the first available degree slots.
             The degrees are assigned in the order they appear in the input array.
             @param semitones An array of semitones (0-11). Duplicates will be ignored.
         */
@@ -168,6 +172,25 @@ namespace MidiTools
 
             for (int i = 0; i < juce::jmin(7, uniqueSemitones.size()); ++i)
                 degrees.set(i, uniqueSemitones.getUnchecked(i));
+        }
+
+        /**
+            Sets the chord directly from an array of raw MIDI note numbers.
+            This is for the "Chord Played As Is" mode. It stores the exact notes,
+            preserving octave and allowing for complex, non-standard chords.
+            @param notes An array of MIDI note numbers.
+        */
+        void setNotesByArray(const juce::Array<int>& notes)
+        {
+            name = "Custom";
+            rawNotes = notes;
+            rawNotes.sort(); // Keep a consistent order
+        }
+
+        /** Returns the raw MIDI notes that were set via setNotesByArray. */
+        const juce::Array<int>& getRawNotes() const
+        {
+            return rawNotes;
         }
 
         /** Returns a SortedSet of the present semitones (0-11) in the chord.
@@ -188,6 +211,75 @@ namespace MidiTools
     private:
         juce::String name;
         juce::Array<int> degrees; // Stores 7 degrees: 1, 3, 5, 7, 9, 11, 13. -1 means absent.
+        juce::Array<int> rawNotes; // Stores raw MIDI notes for "as is" mode.
+    };
+
+    /**
+        Represents a musical scale, defined by a root note and a type.
+        The class stores the 7 notes of the scale as semitone values (0-11).
+    */
+    class Scale
+    {
+    public:
+        /** The available scale types. */
+        enum class Type
+        {
+            Major,
+            MelodicMinor,
+            HarmonicMinor,
+            Bartok
+        };
+
+        /**
+            Constructs a scale from a root note name and a scale type.
+            @param rootNoteName The name of the root note (e.g., "C", "F#", "Bb").
+            @param scaleType    The type of scale to generate.
+        */
+        Scale(const juce::String& rootNoteName, Type scaleType)
+        {
+            auto& noteMap = getNoteNameOffsetMap();
+            auto cleanedName = rootNoteName.trim().toLowerCase();
+            int rootSemitone = 0;
+
+            if (noteMap.count(cleanedName))
+                rootSemitone = noteMap.at(cleanedName);
+
+            buildScale(rootSemitone, scaleType);
+        }
+
+        /**
+            Constructs a scale from a MIDI note number and a scale type.
+            @param rootNoteNumber The MIDI note number of the root. The octave is ignored.
+            @param scaleType      The type of scale to generate.
+        */
+        Scale(int rootNoteNumber, Type scaleType)
+        {
+            int rootSemitone = rootNoteNumber % 12;
+            buildScale(rootSemitone, scaleType);
+        }
+
+        /** Returns a sorted array of 7 semitones (0-11) representing the notes in the scale. */
+        const juce::Array<int>& getNotes() const
+        {
+            return notes;
+        }
+
+    private:
+        void buildScale(int rootSemitone, Type scaleType)
+        {
+            static const std::map<Type, juce::Array<int>> scaleIntervals = {
+                {Type::Major,         {0, 2, 4, 5, 7, 9, 11}},
+                {Type::MelodicMinor,  {0, 2, 3, 5, 7, 9, 11}},
+                {Type::HarmonicMinor, {0, 2, 3, 5, 7, 8, 11}},
+                {Type::Bartok,        {0, 2, 4, 6, 7, 9, 10}} // Lydian Dominant
+            };
+
+            const auto& intervals = scaleIntervals.at(scaleType);
+            for (int interval : intervals)
+                notes.add((rootSemitone + interval) % 12);
+        }
+
+        juce::Array<int> notes; // Stores the 7 semitones of the scale (0-11).
     };
 
     /**

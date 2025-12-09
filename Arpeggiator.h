@@ -51,7 +51,7 @@ public:
         : chord(MidiTools::Chord("CM")), pattern("012"), octave(baseOctave)
     {
     }
-public:
+
     /**
         Constructs an Arpeggiator.
         @param initialChord The chord to be arpeggiated.
@@ -197,12 +197,15 @@ private:
             // std::cout << "We should play a note!" << std::endl;
             // std::cout << "currentDegreeIndex = " << currentDegreeIndex << std::endl;
 
-            int semitone = getSemitoneForDegree(currentDegreeIndex);
+            int finalNote = getNoteForDegree(currentDegreeIndex);
             // std::cout << "     semitone = " << semitone << std::endl;
 
-            if (semitone != -1)
+            if (finalNote != -1)
             {
-                noteToPlay = semitone + (octave * 12);
+                // Calculate the octave offset from the base.
+                int octaveOffset = octave - baseOctave;
+                // For "Notes played" mode, add offset to the base octave. For "As Is" mode, add offset to the original note.
+                noteToPlay = (chordMethod == 0) ? finalNote + (octave * 12) : finalNote + (octaveOffset * 12);
             }
         }
         
@@ -222,7 +225,12 @@ private:
 public:
     // --- Setters for properties ---
     void setChord(const MidiTools::Chord& newChord) { chord = newChord; }
-    void setPattern(const juce::String& newPattern) { pattern = newPattern; pos = 0; }
+    void setPattern(const juce::String& newPattern)
+    {
+        pattern = newPattern;
+        pos = 0;
+        octave = baseOctave; // Reset octave on pattern change for a clean start.
+    }
     void setOctave(int newOctave) { octave = juce::jlimit(0, 7, newOctave); }
     void setPlayNoteOffMode(const juce::String& mode) { playNoteOff = mode; }
     void setTempo(double newTempoBPM)
@@ -235,6 +243,11 @@ public:
     {
         subdivision = subdivisionIndex;
         updateSamplesPerNote();
+    }
+
+    void setChordMethod(int methodIndex)
+    {
+        chordMethod = methodIndex;
     }
 
     /** Calculates the number of musical steps in the pattern string. */
@@ -374,55 +387,70 @@ public:
         // Also reset pattern position and other state variables for a clean start next time.
         pos = 0;
         lastPlayedDegreeIndex = 0;
+        octave = baseOctave;
         return noteOffBuffer;
     }
 
 protected:
     /**
         Finds a valid semitone for a given degree index, handling absent notes.
+        For "Notes played" mode, it returns a semitone (0-11).
+        For "Chord played as is" mode, it returns a full MIDI note number (0-127).
     */
-    int getSemitoneForDegree(int degreeIndex)
+    int getNoteForDegree(int degreeIndex)
     {
-        if (!juce::isPositiveAndBelow(degreeIndex, 7))
-            return -1;
-
-        // If we are using a "Custom" chord from played notes, we should loop within the number of notes played.
-        if (chord.getName() == "Custom")
+        if (chordMethod == 1) // "Chord played as is"
         {
-            juce::SortedSet<int> playedNotes = chord.getSortedSet();
-            int numPlayedNotes = playedNotes.size();
+            const auto& rawNotes = chord.getRawNotes();
+            if (rawNotes.isEmpty())
+                return -1;
+            
+            // Wrap the degree index around the number of notes being held.
+            return rawNotes[degreeIndex % rawNotes.size()];
+        }
+        else // "Notes played" (and other future modes)
+        {
+            if (!juce::isPositiveAndBelow(degreeIndex, 7))
+                return -1;
 
-            if (numPlayedNotes > 0)
+            // If we are using a "Custom" chord from played notes, we should loop within the number of notes played.
+            if (chord.getName() == "Custom")
             {
-                // Use modulo to wrap the degree index around the number of notes being held.
-                return playedNotes[degreeIndex % numPlayedNotes];
+                juce::SortedSet<int> playedNotes = chord.getSortedSet();
+                int numPlayedNotes = playedNotes.size();
+
+                if (numPlayedNotes > 0)
+                {
+                    // Use modulo to wrap the degree index around the number of notes being held.
+                    return playedNotes[degreeIndex % numPlayedNotes];
+                }
             }
-        }
 
-        int semitone = chord.getDegree(degreeIndex);
+            int semitone = chord.getDegree(degreeIndex);
 
-        if (semitone != -1)
-            return semitone;
+            if (semitone != -1)
+                return semitone;
 
-        // If the degree is absent, handle it based on the mode
-        if (playNoteOff == "Off")
-        {
-            return -1;
-        }
-        else if (playNoteOff == "Next")
-        {
-            for (int i = 1; i < 7; ++i)
+            // If the degree is absent, handle it based on the mode
+            if (playNoteOff == "Off")
             {
-                semitone = chord.getDegree((degreeIndex + i) % 7);
-                if (semitone != -1) return semitone;
+                return -1;
             }
-        }
-        else if (playNoteOff == "Previous")
-        {
-            for (int i = 1; i < 7; ++i)
+            else if (playNoteOff == "Next")
             {
-                semitone = chord.getDegree((degreeIndex + 7 - i) % 7);
-                if (semitone != -1) return semitone;
+                for (int i = 1; i < 7; ++i)
+                {
+                    semitone = chord.getDegree((degreeIndex + i) % 7);
+                    if (semitone != -1) return semitone;
+                }
+            }
+            else if (playNoteOff == "Previous")
+            {
+                for (int i = 1; i < 7; ++i)
+                {
+                    semitone = chord.getDegree((degreeIndex + 7 - i) % 7);
+                    if (semitone != -1) return semitone;
+                }
             }
         }
         
@@ -453,10 +481,12 @@ protected:
     int baseOctave = 4;
     int octave = baseOctave;
     juce::String playNoteOff = "Next"; // "Off", "Next", "Previous"
+    int chordMethod = 0; // 0: Notes played, 1: Chord played as is
 
     int pos = 0;
     int lastPlayedMidiNote = -1;
     int lastPlayedDegreeIndex = 0;
+
 private:
     double getNoteDivisor() const
     {
