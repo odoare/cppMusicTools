@@ -98,16 +98,12 @@ public:
         while (time < numSamples)
         {
             //std::cout << "time = " << time << std::endl;
-
-            if (samplesUntilNextNote <= 0.0)
+            if (justSynced)
             {
-                // std::cout << "Should call getNext()" << std::endl;
-                // Time to generate the next note from the pattern.
-                // The events are timestamped relative to the start of this block.
-                // The `addEvents` signature is:
-                // addEvents (sourceBuffer, startSampleInSource, numSamplesInSource, timeOffsetToAdd)
-                // Our getNext() buffer has events at time 0, so we start copying from sample 0
-                // and add the current `time` as an offset.
+                justSynced = false; // Consume the sync flag
+            }
+            else if (samplesUntilNextNote <= 0.0)
+            {
                 generatedMidi.addEvents(getNext(), 0, -1, time);
                 samplesUntilNextNote += samplesPerNote;
             }
@@ -241,6 +237,46 @@ public:
         subdivision = subdivisionIndex;
         updateSamplesPerNote();
     }
+
+    /** Calculates the number of musical steps in the pattern string. */
+    int numSteps() const
+    {
+        if (pattern.isEmpty())
+            return 0;
+
+        int steps = 0;
+        int i = 0;
+        while (i < pattern.length())
+        {
+            steps++; // This is the beginning of a new step.
+            bool noteCommandFound = false;
+            while (!noteCommandFound && i < pattern.length())
+            {
+                if (pattern[i] == 'o')
+                {
+                    i += 2; // Skip 'o' and its argument.
+                }
+                else
+                {
+                    noteCommandFound = true;
+                    i++; // Consume the note command.
+                }
+            }
+        }
+        return steps;
+    }
+
+    /** Returns the total duration of one full pattern loop in PPQ. */
+    double ppqDuration() const
+    {
+        const int steps = numSteps();
+        if (steps == 0)
+            return 0.0;
+
+        // The duration of one step in PPQ is 1.0 / notesPerQuarter.
+        return steps / getNoteDivisor();
+    }
+
     /**
         Synchronizes the arpeggiator's internal clock to the host's transport position.
         This should be called on every process block while the host is playing.
@@ -248,23 +284,28 @@ public:
     */
     void syncToPlayHead(const juce::AudioPlayHead::CurrentPositionInfo& positionInfo)
     {
-        if (samplesPerNote <= 0.0 || positionInfo.ppqPosition < 0.0)
+        if (samplesPerNote <= 0.0 || positionInfo.ppqPosition < 0.0 || pattern.isEmpty())
             return;
-
-        // Calculate the host's position in terms of 16th notes.
-        // A quarter note (ppq) contains `noteDivisor` number of notes.
-        const double notesPerQuarter = getNoteDivisor();
-        const double positionInNotes = positionInfo.ppqPosition * notesPerQuarter;
-
-        // Find the position of the *next* 16th note.
-        const double nextNotePosition = std::ceil(positionInNotes);
-
-        // Calculate the distance (in 16th notes) to the next grid line.
-        const double notesUntilNext = nextNotePosition - positionInNotes;
-
-        // Convert that distance into samples.
-        // samplesPerNote is the duration of one 16th note in samples.
-        samplesUntilNextNote = notesUntilNext * samplesPerNote;
+    
+        const double patternDurationPPQ = ppqDuration();
+        if (patternDurationPPQ <= 0.0)
+            return;
+    
+        const double stepDurationPPQ = 1.0 / getNoteDivisor();
+        const double songPosInSteps = positionInfo.ppqPosition / stepDurationPPQ;
+        const double patternDurationInSteps = patternDurationPPQ / stepDurationPPQ;
+    
+        // Calculate the current step index within the pattern loop
+        const int currentStepIndex = static_cast<int>(fmod(songPosInSteps, patternDurationInSteps));
+        pos = getPatternIndexForStep(currentStepIndex);
+    
+        // Calculate how many samples until the next step boundary in the host timeline
+        const double nextStepInSong = std::ceil(songPosInSteps);
+        const double stepsUntilNext = nextStepInSong - songPosInSteps;
+        const double ppqUntilNext = stepsUntilNext * stepDurationPPQ;
+        const double secondsPerPPQ = 60.0 / (tempoBPM * 1.0); // 1.0 is quarter note
+        samplesUntilNextNote = ppqUntilNext * secondsPerPPQ * sampleRate;
+        justSynced = true;
     }
 
     /** Resets the arpeggiator's position to the beginning of the pattern. */
@@ -274,14 +315,14 @@ public:
         if (lastPlayedMidiNote != -1)
         {
             noteOffBuffer.addEvent(juce::MidiMessage::noteOff(1, lastPlayedMidiNote), 0);
+            lastPlayedMidiNote = -1;
         }
 
         octave = baseOctave;
-
         pos = 0;
-        lastPlayedMidiNote = -1;
         lastPlayedDegreeIndex = 0;
-        // samplesUntilNextNote = 0; // This should not be reset here.
+        samplesUntilNextNote = 0;
+
         return noteOffBuffer;
     }
 
@@ -366,6 +407,30 @@ protected:
     int lastPlayedMidiNote = -1;
     int lastPlayedDegreeIndex = 0;
 private:
+    /** Given a step index (0, 1, 2...), find the corresponding character index in the pattern string. */
+    int getPatternIndexForStep(int stepIndex) const
+    {
+        if (pattern.isEmpty())
+            return 0;
+
+        int stepCount = 0;
+        int i = 0;
+        while (i < pattern.length())
+        {
+            if (stepCount == stepIndex)
+                return i;
+
+            stepCount++;
+            bool noteCommandFound = false;
+            while (!noteCommandFound && i < pattern.length())
+            {
+                if (pattern[i] == 'o') i += 2;
+                else { noteCommandFound = true; i++; }
+            }
+        }
+        return 0; // Fallback
+    }
+
     double getNoteDivisor() const
     {
         switch (subdivision)
@@ -396,4 +461,5 @@ private:
     int subdivision = 4; // Default to 1/16
     double samplesPerNote = 0.0;
     double samplesUntilNextNote = 0.0;
+    bool justSynced = false;
 };
