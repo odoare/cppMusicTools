@@ -97,18 +97,18 @@ public:
         int time = 0;
         while (time < numSamples)
         {
-            //std::cout << "time = " << time << std::endl;
-            if (justSynced)
-            {
-                justSynced = false; // Consume the sync flag
-            }
-            else if (samplesUntilNextNote <= 0.0)
+            if (samplesUntilNextNote <= 0.0)
             {
                 generatedMidi.addEvents(getNext(), 0, -1, time);
-                samplesUntilNextNote += samplesPerNote;
+                // Use 'while' to handle cases where the block size is larger than the note duration.
+                while (samplesUntilNextNote <= 0.0)
+                    samplesUntilNextNote += samplesPerNote;
             }
-
-            int samplesThisStep = juce::jmin(numSamples - time, (int)std::ceil(samplesUntilNextNote));
+ 
+            // Ensure we always advance time, even if samplesUntilNextNote is 0.
+            const int samplesToAdvance = (int)std::ceil(samplesUntilNextNote);
+            const int samplesThisStep = juce::jmin(numSamples - time, juce::jmax(1, samplesToAdvance));
+ 
             time += samplesThisStep;
             samplesUntilNextNote -= samplesThisStep;
         }
@@ -169,18 +169,17 @@ private:
             {
                 switch (command)
                 {
-                    case '+': currentDegreeIndex = (currentDegreeIndex + 1) % 7; break;
-                    case '-': currentDegreeIndex = (currentDegreeIndex + 6) % 7; break;
-                    case '#': currentDegreeIndex = (currentDegreeIndex + 2) % 7; break;
-                    case '=': currentDegreeIndex = (currentDegreeIndex + 5) % 7; break;
-                    case '*': currentDegreeIndex = getRandomPresentDegree(); break;
-                    case '"': /* currentDegreeIndex remains the same as lastPlayedDegreeIndex */ break;
-                    case '.': currentDegreeIndex = -1; /* Rest */ break;
+                    case '+': currentDegreeIndex = (currentDegreeIndex + 1) % 7; noteCommandFound = true; break;
+                    case '-': currentDegreeIndex = (currentDegreeIndex + 6) % 7; noteCommandFound = true; break;
+                    case '#': currentDegreeIndex = (currentDegreeIndex + 2) % 7; noteCommandFound = true; break;
+                    case '=': currentDegreeIndex = (currentDegreeIndex + 5) % 7; noteCommandFound = true; break;
+                    case '*': currentDegreeIndex = getRandomPresentDegree(); noteCommandFound = true; break;
+                    case '"': /* currentDegreeIndex remains the same */ noteCommandFound = true; break;
+                    case '.': currentDegreeIndex = -1; /* Rest */ noteCommandFound = true; break;
                     default:  // Invalid characters are ignored.
-                        noteCommandFound = false; // Ensure we continue the loop
-                        continue; // Skip to the next character in the pattern.
+                        // Do nothing, just loop to the next character.
+                        break;
                 }
-                noteCommandFound = true;
             }
         }
 
@@ -248,22 +247,59 @@ public:
         int i = 0;
         while (i < pattern.length())
         {
-            steps++; // This is the beginning of a new step.
-            bool noteCommandFound = false;
-            while (!noteCommandFound && i < pattern.length())
+            char command = pattern[i];
+            if (command == 'o')
             {
-                if (pattern[i] == 'o')
-                {
-                    i += 2; // Skip 'o' and its argument.
-                }
-                else
-                {
-                    noteCommandFound = true;
-                    i++; // Consume the note command.
-                }
+                i += 2; // Skip 'o' and its argument
+            }
+            else if (juce::CharacterFunctions::isDigit(command) ||
+                     command == '+' || command == '-' || command == '#' ||
+                     command == '=' || command == '*' || command == '"' ||
+                     command == '.' || command == '_')
+            {
+                steps++; // This is a valid step command
+                i++; // Consume the command
+            }
+            else
+            {
+                i++; // Ignore and consume other characters (like spaces)
             }
         }
         return steps;
+    }
+
+    /** Given a step index (0, 1, 2...), find the corresponding character index in the pattern string. */
+    int getPatternIndexForStep(int stepIndex) const
+    {
+        if (pattern.isEmpty())
+            return 0;
+
+        int currentStepCount = 0;
+        int i = 0;
+        while (i < pattern.length())
+        {
+            if (currentStepCount == stepIndex)
+                return i; // Found the start of the desired step
+
+            char command = pattern[i];
+            if (command == 'o')
+            {
+                i += 2; // Skip 'o' and its argument
+            }
+            else if (juce::CharacterFunctions::isDigit(command) ||
+                     command == '+' || command == '-' || command == '#' ||
+                     command == '=' || command == '*' || command == '"' ||
+                     command == '.' || command == '_')
+            {
+                currentStepCount++;
+                i++; // Consume the command
+            }
+            else
+            {
+                i++; // Ignore and consume other characters (like spaces)
+            }
+        }
+        return 0; // Fallback if stepIndex is out of bounds
     }
 
     /** Returns the total duration of one full pattern loop in PPQ. */
@@ -296,8 +332,9 @@ public:
         const double patternDurationInSteps = patternDurationPPQ / stepDurationPPQ;
     
         // Calculate the current step index within the pattern loop
-        const int currentStepIndex = static_cast<int>(fmod(songPosInSteps, patternDurationInSteps));
-        pos = getPatternIndexForStep(currentStepIndex);
+        // We want to find the NEXT step to be played.
+        const int nextStepIndex = static_cast<int>(std::ceil(songPosInSteps)) % static_cast<int>(patternDurationInSteps);
+        pos = getPatternIndexForStep(nextStepIndex);
     
         // Calculate how many samples until the next step boundary in the host timeline
         const double nextStepInSong = std::ceil(songPosInSteps);
@@ -305,7 +342,6 @@ public:
         const double ppqUntilNext = stepsUntilNext * stepDurationPPQ;
         const double secondsPerPPQ = 60.0 / (tempoBPM * 1.0); // 1.0 is quarter note
         samplesUntilNextNote = ppqUntilNext * secondsPerPPQ * sampleRate;
-        justSynced = true;
     }
 
     /** Resets the arpeggiator's position to the beginning of the pattern. */
@@ -323,6 +359,21 @@ public:
         lastPlayedDegreeIndex = 0;
         samplesUntilNextNote = 0;
 
+        return noteOffBuffer;
+    }
+
+    /** Generates a note-off for the last played note and resets the state. */
+    juce::MidiBuffer turnOff()
+    {
+        juce::MidiBuffer noteOffBuffer;
+        if (lastPlayedMidiNote != -1)
+        {
+            noteOffBuffer.addEvent(juce::MidiMessage::noteOff(1, lastPlayedMidiNote), 0);
+            lastPlayedMidiNote = -1;
+        }
+        // Also reset pattern position and other state variables for a clean start next time.
+        pos = 0;
+        lastPlayedDegreeIndex = 0;
         return noteOffBuffer;
     }
 
@@ -407,30 +458,6 @@ protected:
     int lastPlayedMidiNote = -1;
     int lastPlayedDegreeIndex = 0;
 private:
-    /** Given a step index (0, 1, 2...), find the corresponding character index in the pattern string. */
-    int getPatternIndexForStep(int stepIndex) const
-    {
-        if (pattern.isEmpty())
-            return 0;
-
-        int stepCount = 0;
-        int i = 0;
-        while (i < pattern.length())
-        {
-            if (stepCount == stepIndex)
-                return i;
-
-            stepCount++;
-            bool noteCommandFound = false;
-            while (!noteCommandFound && i < pattern.length())
-            {
-                if (pattern[i] == 'o') i += 2;
-                else { noteCommandFound = true; i++; }
-            }
-        }
-        return 0; // Fallback
-    }
-
     double getNoteDivisor() const
     {
         switch (subdivision)
@@ -461,5 +488,4 @@ private:
     int subdivision = 4; // Default to 1/16
     double samplesPerNote = 0.0;
     double samplesUntilNextNote = 0.0;
-    bool justSynced = false;
 };
