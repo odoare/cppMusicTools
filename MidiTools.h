@@ -39,6 +39,74 @@ namespace MidiTools
     }
 
     /**
+        Represents a musical scale, defined by a root note and a type.
+        The class stores the 7 notes of the scale as semitone values (0-11).
+    */
+    class Scale
+    {
+    public:
+        /** The available scale types. */
+        enum class Type
+        {
+            Major,
+            MelodicMinor,
+            HarmonicMinor,
+            Bartok
+        };
+
+        /**
+            Constructs a scale from a root note name and a scale type.
+            @param rootNoteName The name of the root note (e.g., "C", "F#", "Bb").
+            @param scaleType    The type of scale to generate.
+        */
+        Scale(const juce::String& rootNoteName, Type scaleType)
+        {
+            auto& noteMap = getNoteNameOffsetMap();
+            auto cleanedName = rootNoteName.trim().toLowerCase();
+            int rootSemitone = 0;
+
+            if (noteMap.count(cleanedName))
+                rootSemitone = noteMap.at(cleanedName);
+
+            buildScale(rootSemitone, scaleType);
+        }
+
+        /**
+            Constructs a scale from a MIDI note number and a scale type.
+            @param rootNoteNumber The MIDI note number of the root. The octave is ignored.
+            @param scaleType      The type of scale to generate.
+        */
+        Scale(int rootNoteNumber, Type scaleType)
+        {
+            int rootSemitone = rootNoteNumber % 12;
+            buildScale(rootSemitone, scaleType);
+        }
+
+        /** Returns a sorted array of 7 semitones (0-11) representing the notes in the scale. */
+        const juce::Array<int>& getNotes() const
+        {
+            return notes;
+        }
+
+    private:
+        void buildScale(int rootSemitone, Type scaleType)
+        {
+            static const std::map<Type, juce::Array<int>> scaleIntervals = {
+                {Type::Major,         {0, 2, 4, 5, 7, 9, 11}},
+                {Type::MelodicMinor,  {0, 2, 3, 5, 7, 9, 11}},
+                {Type::HarmonicMinor, {0, 2, 3, 5, 7, 8, 11}},
+                {Type::Bartok,        {0, 2, 4, 6, 7, 9, 10}} // Lydian Dominant
+            };
+
+            const auto& intervals = scaleIntervals.at(scaleType);
+            for (int interval : intervals)
+                notes.add((rootSemitone + interval) % 12);
+        }
+
+        juce::Array<int> notes; // Stores the 7 semitones of the scale (0-11).
+    };
+
+    /**
         Represents a musical chord, with properties like its name and the semitones it contains.
     */
     class Chord
@@ -193,6 +261,44 @@ namespace MidiTools
             return rawNotes;
         }
 
+        /**
+            Creates a new Chord by building a diatonic 7-note chord from a given scale and root degree.
+            This is used for the "Single Note" mode.
+            @param scale The scale to pick notes from.
+            @param degree The root degree within the scale (0-6) to build the chord on.
+            @return A new Chord object containing the diatonic notes.
+        */
+        static Chord fromScaleAndDegree(const Scale& scale, int degree)
+        {
+            Chord newChord("Diatonic");
+            const auto& scaleNotes = scale.getNotes();
+            if (scaleNotes.size() != 7)
+                return newChord; // Return empty chord if scale is invalid
+
+            degree = degree % 7; // Ensure degree is within bounds
+
+            int fundamental = scaleNotes[(degree + 0) % 7];
+            newChord.degrees.set(0, fundamental); // Fundamental
+
+            auto getVoicedNote = [&](int interval) -> int
+            {
+                int note = scaleNotes[(degree + interval) % 7];
+                // If the note is lower than the fundamental, transpose it up an octave
+                // to ensure the fundamental is the lowest note in the chord voicing.
+                return (note < fundamental) ? note + 12 : note;
+            };
+
+            // Build the 7-note chord by stacking thirds from the scale
+            newChord.degrees.set(1, getVoicedNote(2)); // Third
+            newChord.degrees.set(2, getVoicedNote(4)); // Fifth
+            newChord.degrees.set(3, getVoicedNote(6)); // Seventh
+            newChord.degrees.set(4, getVoicedNote(1)); // Ninth (is the 2nd degree)
+            newChord.degrees.set(5, getVoicedNote(3)); // Eleventh (is the 4th degree)
+            newChord.degrees.set(6, getVoicedNote(5)); // Thirteenth (is the 6th degree)
+
+            return newChord;
+        }
+
         /** Returns a SortedSet of the present semitones (0-11) in the chord.
             This is useful for checking against a collection of played MIDI notes
             where order and octave do not matter.
@@ -212,74 +318,6 @@ namespace MidiTools
         juce::String name;
         juce::Array<int> degrees; // Stores 7 degrees: 1, 3, 5, 7, 9, 11, 13. -1 means absent.
         juce::Array<int> rawNotes; // Stores raw MIDI notes for "as is" mode.
-    };
-
-    /**
-        Represents a musical scale, defined by a root note and a type.
-        The class stores the 7 notes of the scale as semitone values (0-11).
-    */
-    class Scale
-    {
-    public:
-        /** The available scale types. */
-        enum class Type
-        {
-            Major,
-            MelodicMinor,
-            HarmonicMinor,
-            Bartok
-        };
-
-        /**
-            Constructs a scale from a root note name and a scale type.
-            @param rootNoteName The name of the root note (e.g., "C", "F#", "Bb").
-            @param scaleType    The type of scale to generate.
-        */
-        Scale(const juce::String& rootNoteName, Type scaleType)
-        {
-            auto& noteMap = getNoteNameOffsetMap();
-            auto cleanedName = rootNoteName.trim().toLowerCase();
-            int rootSemitone = 0;
-
-            if (noteMap.count(cleanedName))
-                rootSemitone = noteMap.at(cleanedName);
-
-            buildScale(rootSemitone, scaleType);
-        }
-
-        /**
-            Constructs a scale from a MIDI note number and a scale type.
-            @param rootNoteNumber The MIDI note number of the root. The octave is ignored.
-            @param scaleType      The type of scale to generate.
-        */
-        Scale(int rootNoteNumber, Type scaleType)
-        {
-            int rootSemitone = rootNoteNumber % 12;
-            buildScale(rootSemitone, scaleType);
-        }
-
-        /** Returns a sorted array of 7 semitones (0-11) representing the notes in the scale. */
-        const juce::Array<int>& getNotes() const
-        {
-            return notes;
-        }
-
-    private:
-        void buildScale(int rootSemitone, Type scaleType)
-        {
-            static const std::map<Type, juce::Array<int>> scaleIntervals = {
-                {Type::Major,         {0, 2, 4, 5, 7, 9, 11}},
-                {Type::MelodicMinor,  {0, 2, 3, 5, 7, 9, 11}},
-                {Type::HarmonicMinor, {0, 2, 3, 5, 7, 8, 11}},
-                {Type::Bartok,        {0, 2, 4, 6, 7, 9, 10}} // Lydian Dominant
-            };
-
-            const auto& intervals = scaleIntervals.at(scaleType);
-            for (int interval : intervals)
-                notes.add((rootSemitone + interval) % 12);
-        }
-
-        juce::Array<int> notes; // Stores the 7 semitones of the scale (0-11).
     };
 
     /**
