@@ -25,17 +25,23 @@
       - The `playNoteOff` property determines behavior for absent degrees ("Off", "Next", "Previous").
     - '_': Sustains the previously played note.
     - '.': A rest; no note is played.
-    - '+': Plays the next degree in the chord (loops from 6 to 0).
-    - '-': Plays the previous degree in the chord (loops from 0 to 6).
-    - '#': Plays the degree two steps higher in the chord (e.g., from 1 to 3).
-    - '=': Plays the degree two steps lower in the chord (e.g., from 3 to 1).
+    - '+': Plays the next degree in the chord (e.g., from 1 to 2).
+    - '-': Plays the previous degree in the chord (e.g., from 2 to 1).
     - '*': Plays a random, valid note from the current chord.
-    - '"': Repeats the last played degree.
+    - '"' or '=': Repeats the last played degree.
+    - '#' (Sharp): Pitches the next note up by one semitone. This is a local effect. Example: "#0"
+    - 'b' (Flat): Pitches the next note down by one semitone. This is a local effect. Example: "b0"
+
+    Velocity Modifiers (prefixed to a note command):
+    - 'vN': Sets velocity for the next note only. N is a digit from 1-8 (16-127). Example: "v80"
+    - 'VN': Sets velocity globally until the next 'V' command. N is a digit from 1-8. Example: "V40"
+      - v1/V1=16, v2/V2=32, v3/V3=48, v4/V4=64, v5/V5=80, v6/V6=96, v7/V7=112, v8/V8=127.
 
     Octave Modifiers (prefixed to a note command):
-    - 'oN': Sets the octave to N (where N is a digit from 0-7). Example: "o30" sets octave to 3 and plays the root.
-    - 'o+': Increases the octave by one. Example: "o+0" plays the root one octave higher.
-    - 'o-': Decreases the octave by one. Example: "o-0" plays the root one octave lower.
+    - 'oN': Sets octave for the next note only. N is a digit from 0-7. Example: "o30"
+    - 'o+': Increases octave by one for the next note only. Example: "o+0"
+    - 'o-': Decreases octave by one for the next note only. Example: "o-0"
+    - 'ON', 'O+', 'O-': Same as above, but sets the octave globally until the next 'O' command.
 
     Note: Octave modifiers are prefixes. "o-o-" means "decrease octave, then decrease octave again".
     To decrease the octave and then play the previous degree, you would use "o--".
@@ -133,6 +139,9 @@ private:
         // --- 2. Parse the pattern using a robust loop ---
         int noteToPlay = -1;
         int currentDegreeIndex = lastPlayedDegreeIndex;
+        int semitoneOffset = 0; // For local sharp/flat modifiers
+        int localVelocity = -1; // For local velocity modifier
+        int localOctave = -1;   // For local octave modifier
         bool noteCommandFound = false;
 
         while (!noteCommandFound)
@@ -147,17 +156,52 @@ private:
             {
                 return midiBuffer; // Return an empty buffer, sustaining the note.
             }
-            if (command == 'o') // Octave prefix
+            if (command == 'o' || command == 'O') // Octave prefix
             {
                 char octaveCommand = pattern[pos];
                 pos = (pos + 1) % pattern.length(); // Consume octave command
 
+                // Start with the current global octave to calculate the new value.
+                int targetOctave = octave;
+
                 if (octaveCommand == '+')
-                    octave = juce::jmin(7, octave + 1);
+                    targetOctave = juce::jmin(7, octave + 1);
                 else if (octaveCommand == '-')
-                    octave = juce::jmax(0, octave - 1);
+                    targetOctave = juce::jmax(0, octave - 1);
                 else if (juce::CharacterFunctions::isDigit(octaveCommand))
-                    octave = octaveCommand - '0'; // Correctly convert char '0'-'7' to int 0-7
+                    targetOctave = octaveCommand - '0'; // Correctly convert char '0'-'7' to int 0-7
+
+                if (command == 'o')
+                    localOctave = targetOctave;
+                else // 'O'
+                    octave = targetOctave;
+                // Continue loop to find the note command
+            }
+            else if (command == '#') // Sharp prefix
+            {
+                semitoneOffset = 1;
+                // Continue loop to find the note command
+            }
+            else if (command == 'b') // Flat prefix
+            {
+                semitoneOffset = -1;
+                // Continue loop to find the note command
+            }
+            else if (command == 'v' || command == 'V') // Velocity prefix
+            {
+                char velocityValueChar = pattern[pos];
+                pos = (pos + 1) % pattern.length(); // Consume velocity value
+
+                if (juce::CharacterFunctions::isDigit(velocityValueChar))
+                {
+                    int velocityLevel = velocityValueChar - '0';
+                    int velocity = juce::jmin(127, velocityLevel * 16);
+
+                    if (command == 'v')
+                        localVelocity = velocity;
+                    else // 'V'
+                        globalVelocity = velocity;
+                }
                 // Continue loop to find the note command
             }
             else if (juce::CharacterFunctions::isDigit(command))
@@ -171,9 +215,8 @@ private:
                 {
                     case '+': currentDegreeIndex = (currentDegreeIndex + 1) % 7; noteCommandFound = true; break;
                     case '-': currentDegreeIndex = (currentDegreeIndex + 6) % 7; noteCommandFound = true; break;
-                    case '#': currentDegreeIndex = (currentDegreeIndex + 2) % 7; noteCommandFound = true; break;
-                    case '=': currentDegreeIndex = (currentDegreeIndex + 5) % 7; noteCommandFound = true; break;
                     case '*': currentDegreeIndex = getRandomPresentDegree(); noteCommandFound = true; break;
+                    case '=': // Fall-through
                     case '"': /* currentDegreeIndex remains the same */ noteCommandFound = true; break;
                     case '.': currentDegreeIndex = -1; /* Rest */ noteCommandFound = true; break;
                     default:  // Invalid characters are ignored.
@@ -202,17 +245,29 @@ private:
 
             if (finalNote != -1)
             {
+                // Use local octave if set, otherwise use global octave.
+                int octaveToUse = (localOctave != -1) ? localOctave : octave;
+
                 // Calculate the octave offset from the base.
-                int octaveOffset = octave - baseOctave;
-                // For "Notes played" mode, add offset to the base octave. For "As Is" mode, add offset to the original note.
-                noteToPlay = (chordMethod == 0) ? finalNote + (octave * 12) : finalNote + (octaveOffset * 12);
+                int octaveOffset = octaveToUse - baseOctave;
+                // For "Notes played" (0) and "Single note" (2) modes, the finalNote is a semitone (0-11)
+                // that needs to be placed in an absolute octave.
+                // For "Chord played as is" (1) mode, the finalNote is a full MIDI note that needs a relative offset.
+                if (chordMethod == 1)
+                    noteToPlay = finalNote + (octaveOffset * 12);
+                else // Modes 0 and 2
+                    noteToPlay = finalNote + (octaveToUse * 12);
             }
         }
         
         // --- 4. Generate MIDI event ---
         if (noteToPlay != -1 )
         {
-            midiBuffer.addEvent(juce::MidiMessage::noteOn(1, noteToPlay, (juce::uint8)100), samplePosition);
+            noteToPlay += semitoneOffset; // Apply sharp/flat
+
+            // Use local velocity if set, otherwise use global velocity.
+            juce::uint8 velocityToUse = (localVelocity != -1) ? (juce::uint8)localVelocity : (juce::uint8)globalVelocity;
+            midiBuffer.addEvent(juce::MidiMessage::noteOn(1, noteToPlay, velocityToUse), samplePosition);
             lastPlayedMidiNote = noteToPlay;
             lastPlayedDegreeIndex = currentDegreeIndex;
         }
@@ -224,7 +279,15 @@ private:
     }
 public:
     // --- Setters for properties ---
-    void setChord(const MidiTools::Chord& newChord) { chord = newChord; }
+    void setChord(const MidiTools::Chord& newChord)
+    {
+        chord = newChord;
+        for (int i : chord.getDegrees())
+        {
+            std::cout << i << "   ";
+        }
+        std::cout << std::endl;
+    }
     void setPattern(const juce::String& newPattern)
     {
         pattern = newPattern;
@@ -250,6 +313,19 @@ public:
         chordMethod = methodIndex;
     }
 
+    /**
+        Sets the base octave based on an incoming MIDI note.
+        This is used in "Single Note" mode to make the output octave follow the input.
+        @param midiNoteNumber The MIDI note number from which to derive the octave.
+    */
+    void setBaseOctaveFromNote(int midiNoteNumber)
+    {
+        // MIDI note 60 (C4) is in octave 4. (60 / 12) - 1 = 4.
+        int newOctave = (midiNoteNumber / 12) - 1;
+        baseOctave = juce::jlimit(0, 7, newOctave);
+        octave = baseOctave; // Also reset the current octave to this new base.
+    }
+
     /** Calculates the number of musical steps in the pattern string. */
     int numSteps() const
     {
@@ -260,15 +336,18 @@ public:
         int i = 0;
         while (i < pattern.length())
         {
-            char command = pattern[i];
-            if (command == 'o')
+            const char command = pattern[i];
+            if (command == 'o' || command == 'O' || command == 'v' || command == 'V')
             {
                 i += 2; // Skip 'o' and its argument
             }
-            else if (juce::CharacterFunctions::isDigit(command) ||
-                     command == '+' || command == '-' || command == '#' ||
-                     command == '=' || command == '*' || command == '"' ||
-                     command == '.' || command == '_')
+            else if (command == '#' || command == 'b')
+            {
+                i++; // Skip sharp/flat prefix
+            }
+            else if (juce::CharacterFunctions::isDigit(command) || command == '+' ||
+                     command == '-' || command == '*' || command == '"' ||
+                     command == '=' || command == '.' || command == '_')
             {
                 steps++; // This is a valid step command
                 i++; // Consume the command
@@ -294,15 +373,18 @@ public:
             if (currentStepCount == stepIndex)
                 return i; // Found the start of the desired step
 
-            char command = pattern[i];
-            if (command == 'o')
+            const char command = pattern[i];
+            if (command == 'o' || command == 'O' || command == 'v' || command == 'V')
             {
                 i += 2; // Skip 'o' and its argument
             }
-            else if (juce::CharacterFunctions::isDigit(command) ||
-                     command == '+' || command == '-' || command == '#' ||
-                     command == '=' || command == '*' || command == '"' ||
-                     command == '.' || command == '_')
+            else if (command == '#' || command == 'b')
+            {
+                i++; // Skip sharp/flat prefix
+            }
+            else if (juce::CharacterFunctions::isDigit(command) || command == '+' ||
+                     command == '-' || command == '*' || command == '"' ||
+                     command == '=' || command == '.' || command == '_')
             {
                 currentStepCount++;
                 i++; // Consume the command
@@ -368,6 +450,7 @@ public:
         }
 
         octave = baseOctave;
+        globalVelocity = 96; // Reset global velocity to default
         pos = 0;
         lastPlayedDegreeIndex = 0;
         samplesUntilNextNote = 0;
@@ -408,7 +491,7 @@ protected:
             // Wrap the degree index around the number of notes being held.
             return rawNotes[degreeIndex % rawNotes.size()];
         }
-        else // "Notes played" (and other future modes)
+        else // "Notes played" (mode 0) and "Single note" (mode 2)
         {
             if (!juce::isPositiveAndBelow(degreeIndex, 7))
                 return -1;
@@ -481,7 +564,8 @@ protected:
     int baseOctave = 4;
     int octave = baseOctave;
     juce::String playNoteOff = "Next"; // "Off", "Next", "Previous"
-    int chordMethod = 0; // 0: Notes played, 1: Chord played as is
+    int chordMethod = 0; // 0: Notes played, 1: Chord played as is, 2: Single note
+    int globalVelocity = 96; // Default velocity
 
     int pos = 0;
     int lastPlayedMidiNote = -1;
