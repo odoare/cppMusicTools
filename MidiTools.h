@@ -313,20 +313,33 @@ namespace MidiTools
             This is for the "Notes Played" mode. It converts MIDI notes to unique, octave-less
             semitones and assigns them to the first available degree slots.
             The degrees are assigned in the order they appear in the input array.
-            @param semitones An array of semitones (0-11). Duplicates will be ignored.
+            @param notes An array of MIDI note numbers.
         */
-        void setDegreesByArray(const juce::Array<int>& semitones)
+        void setDegreesByArray(const juce::Array<int>& notes)
         {
             name = "Custom";
             degrees.clear();
             degrees.insertMultiple(0, -1, 7); // Reset to 7 absent degrees
 
-            juce::SortedSet<int> uniqueSemitones;
-            for (int note : semitones)
-                uniqueSemitones.add(note % 12);
+            if (notes.isEmpty())
+                return;
 
-            for (int i = 0; i < juce::jmin(7, uniqueSemitones.size()); ++i)
-                degrees.set(i, uniqueSemitones.getUnchecked(i));
+            juce::Array<int> sortedNotes = notes;
+            sortedNotes.sort();
+
+            int lowestNote = sortedNotes.getFirst() % 12;
+
+            juce::SortedSet<int> relativeSemitones;
+            for (int note : sortedNotes)
+            {
+                if (lowestNote > note % 12)
+                    relativeSemitones.add(note % 12 + 12);
+                else
+                    relativeSemitones.add(note % 12);
+            }
+
+            for (int i = 0; i < juce::jmin(7, relativeSemitones.size()); ++i)
+                degrees.set(i, relativeSemitones.getUnchecked(i));
         }
 
         /**
