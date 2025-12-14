@@ -134,78 +134,81 @@ private:
         int localVelocity = -1; // For local velocity modifier
         int localOctave = -1;   // For local octave modifier
         bool noteCommandFound = false;
-
-        while (!noteCommandFound)
+        
+        // This outer loop ensures we will always find a note command, even if we have to
+        // wrap around the pattern string after processing prefixes at the end.
+        for (int i = 0; i < pattern.length() * 2 && !noteCommandFound; ++i)
         {
-            if (pattern.isEmpty()) return {}; // Safety break
+            // This inner loop consumes any number of prefix commands.
+            while (true)
+            {
+                char command = pattern[pos];
+                
+                if (command == 'o' || command == 'O')
+                {
+                    currentStepIndex = getStepForPatternIndex(pos);
+                    pos = (pos + 1) % pattern.length(); // Consume 'o' or 'O'
+                    char octaveCommand = pattern[pos];
+                    pos = (pos + 1) % pattern.length(); // Consume octave value
+                    
+                    int currentStepOctave = (localOctave != -1) ? localOctave : octave;
+                    int targetOctave = currentStepOctave;
+                    if (octaveCommand == '+') targetOctave = juce::jmin(7, currentStepOctave + 1);
+                    else if (octaveCommand == '-') targetOctave = juce::jmax(0, currentStepOctave - 1);
+                    else if (juce::CharacterFunctions::isDigit(octaveCommand)) targetOctave = octaveCommand - '0';
+                    
+                    if (command == 'o') localOctave = targetOctave;
+                    else octave = targetOctave;
+                }
+                else if (command == 'v' || command == 'V')
+                {
+                    currentStepIndex = getStepForPatternIndex(pos);
+                    pos = (pos + 1) % pattern.length(); // Consume 'v' or 'V'
+                    char velocityValueChar = pattern[pos];
+                    pos = (pos + 1) % pattern.length(); // Consume velocity value
+                    
+                    if (juce::CharacterFunctions::isDigit(velocityValueChar))
+                    {
+                        int velocityLevel = velocityValueChar - '0';
+                        int velocity = juce::jmin(127, velocityLevel * 16);
+                        if (command == 'v') localVelocity = velocity;
+                        else globalVelocity = velocity;
+                    }
+                }
+                else if (command == '#')
+                {
+                    currentStepIndex = getStepForPatternIndex(pos);
+                    semitoneOffset = 1;
+                    pos = (pos + 1) % pattern.length();
+                }
+                else if (command == 'b')
+                {
+                    currentStepIndex = getStepForPatternIndex(pos);
+                    semitoneOffset = -1;
+                    pos = (pos + 1) % pattern.length();
+                }
+                else
+                {
+                    break; // Not a prefix, break to handle note commands.
+                }
+            }
 
             char command = pattern[pos];
+            currentStepIndex = getStepForPatternIndex(pos);
             pos = (pos + 1) % pattern.length(); // Consume character
 
-            // If sustain, do nothing and exit immediately. The previous note will continue playing.
             if (command == '_')
             {
-                return midiBuffer; // Return an empty buffer, sustaining the note.
-            }
-            if (command == 'o' || command == 'O') // Octave prefix
-            {
-                char octaveCommand = pattern[pos];
-                pos = (pos + 1) % pattern.length(); // Consume octave command
-
-                // Determine the starting point for this calculation.
-                // If a local octave is already set for this step, use it. Otherwise, use the global octave.
-                int currentStepOctave = (localOctave != -1) ? localOctave : octave;
-                int targetOctave = currentStepOctave;
-
-                if (octaveCommand == '+')
-                    targetOctave = juce::jmin(7, currentStepOctave + 1);
-                else if (octaveCommand == '-')
-                    targetOctave = juce::jmax(0, currentStepOctave - 1);
-                else if (juce::CharacterFunctions::isDigit(octaveCommand))
-                    targetOctave = octaveCommand - '0'; // Correctly convert char '0'-'7' to int 0-7
-
-                // For both 'o' and 'O', we first set the localOctave for the current step's parsing.
-                // If it's 'O', we'll also promote it to the global octave later.
-                if (command == 'o')
-                    localOctave = targetOctave;
-                else // 'O'
-                    octave = targetOctave;
-                // Continue loop to find the note command
-            }
-            else if (command == '#') // Sharp prefix
-            {
-                semitoneOffset = 1;
-                // Continue loop to find the note command
-            }
-            else if (command == 'b') // Flat prefix
-            {
-                semitoneOffset = -1;
-                // Continue loop to find the note command
-            }
-            else if (command == 'v' || command == 'V') // Velocity prefix
-            {
-                char velocityValueChar = pattern[pos];
-                pos = (pos + 1) % pattern.length(); // Consume velocity value
-
-                if (juce::CharacterFunctions::isDigit(velocityValueChar))
-                {
-                    int velocityLevel = velocityValueChar - '0';
-                    int velocity = juce::jmin(127, velocityLevel * 16);
-
-                    if (command == 'v')
-                        localVelocity = velocity;
-                    else // 'V'
-                        globalVelocity = velocity;
-                }
-                // Continue loop to find the note command
+                return midiBuffer; // Sustain note, exit immediately.
             }
             else if (juce::CharacterFunctions::isDigit(command))
             {
-                currentDegreeIndex = command - '0'; // Correctly convert char '0'-'9' to int 0-9
+                currentDegreeIndex = command - '0';
                 noteCommandFound = true;
             }
-            else // It's a non-octave command
+            else
             {
+                // Handle other note commands
                 switch (command)
                 {
                     case '+': currentDegreeIndex = (currentDegreeIndex + 1) % 7; noteCommandFound = true; break;
@@ -213,9 +216,8 @@ private:
                     case '*': currentDegreeIndex = getRandomPresentDegree(); noteCommandFound = true; break;
                     case '=': // Fall-through
                     case '"': /* currentDegreeIndex remains the same */ noteCommandFound = true; break;
-                    case '.': currentDegreeIndex = -1; /* Rest */ noteCommandFound = true; break;
-                    default:  // Invalid characters are ignored.
-                        // Do nothing, just loop to the next character.
+                    case '.': currentDegreeIndex = -1; noteCommandFound = true; break;
+                    default: // Ignore invalid characters (like spaces) and continue loop.
                         break;
                 }
             }
@@ -335,6 +337,12 @@ public:
             globalVelocity = juce::jmin(127, velocityLevel * 16);
         }
     }
+
+    /** Returns the index of the current musical step being played. */
+    int getCurrentStepIndex() const
+    {
+        return currentStepIndex;
+    }
     /** Calculates the number of musical steps in the pattern string. */
     int numSteps() const
     {
@@ -406,6 +414,40 @@ public:
         return 0; // Fallback if stepIndex is out of bounds
     }
 
+    /** Given a character index in the pattern string, find the corresponding musical step index. */
+    int getStepForPatternIndex(int patternIndex) const
+    {
+        if (pattern.isEmpty() || patternIndex < 0)
+            return 0;
+
+        int stepCount = 0;
+        int i = 0;
+        while (i < pattern.length() && i < patternIndex)
+        {
+            const char command = pattern[i];
+            if (command == 'o' || command == 'O' || command == 'v' || command == 'V')
+            {
+                i += 2; // Skip command and its argument
+            }
+            else if (command == '#' || command == 'b')
+            {
+                i++; // Skip prefix
+            }
+            else if (juce::CharacterFunctions::isDigit(command) || command == '+' ||
+                     command == '-' || command == '*' || command == '"' ||
+                     command == '=' || command == '.' || command == '_')
+            {
+                stepCount++;
+                i++;
+            }
+            else
+            {
+                i++; // Ignore other characters
+            }
+        }
+        return stepCount;
+    }
+
     /** Returns the total duration of one full pattern loop in PPQ. */
     double ppqDuration() const
     {
@@ -435,10 +477,6 @@ public:
         const double songPosInSteps = positionInfo.ppqPosition / stepDurationPPQ;
         const double patternDurationInSteps = patternDurationPPQ / stepDurationPPQ;
     
-        // Calculate the current step index within the pattern loop
-        // We want to find the NEXT step to be played.
-        const int nextStepIndex = static_cast<int>(std::ceil(songPosInSteps)) % static_cast<int>(patternDurationInSteps);
-        pos = getPatternIndexForStep(nextStepIndex);
     
         // Calculate how many samples until the next step boundary in the host timeline
         const double nextStepInSong = std::ceil(songPosInSteps);
@@ -449,7 +487,7 @@ public:
     }
 
     /** Resets the arpeggiator's position to the beginning of the pattern. */
-    juce::MidiBuffer reset()
+    juce::MidiBuffer reset(const juce::Optional<juce::AudioPlayHead::CurrentPositionInfo> positionInfo = {})
     {
         juce::MidiBuffer noteOffBuffer;
         if (lastPlayedMidiNote != -1)
@@ -463,6 +501,21 @@ public:
         pos = 0;
         lastPlayedDegreeIndex = 0;
         samplesUntilNextNote = 0;
+
+        // If host position is provided (i.e., transport just started), sync to it.
+        if (positionInfo.hasValue())
+        {
+            const double patternDurationPPQ = ppqDuration();
+            if (patternDurationPPQ > 0.0)
+            {
+                const double stepDurationPPQ = 1.0 / getNoteDivisor();
+                const double songPosInSteps = positionInfo->ppqPosition / stepDurationPPQ;
+                const double patternDurationInSteps = patternDurationPPQ / stepDurationPPQ;
+                const int nextStepIndex = static_cast<int>(std::floor(songPosInSteps)) % static_cast<int>(patternDurationInSteps);
+                pos = getPatternIndexForStep(nextStepIndex);
+                samplesUntilNextNote = 0; // Trigger immediate evaluation for the current position
+            }
+        }
 
         return noteOffBuffer;
     }
@@ -579,6 +632,7 @@ protected:
     int pos = 0;
     int lastPlayedMidiNote = -1;
     int lastPlayedDegreeIndex = 0;
+    int currentStepIndex = 0;
 
 private:
     double getNoteDivisor() const
