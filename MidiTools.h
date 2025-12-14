@@ -48,10 +48,36 @@ namespace MidiTools
         /** The available scale types. */
         enum class Type
         {
+            // Major Scale Modes
             Major,
+            Dorian,
+            Phrygian,
+            Lydian,
+            Mixolydian,
+            Aeolian,
+            Locrian,
+            // Melodic Minor Modes
             MelodicMinor,
+            Dorianb9,
+            LydianSharp5,
+            Lydianb7, // Previously Bartok
+            Mixolydianb13,
+            LocrianNatural9,
+            Altered,
+            // Harmonic Minor Modes
             HarmonicMinor,
-            Bartok
+            LocrianNatural6,
+            IonianSharp5,
+            DorianSharp4,
+            PhrygianDominant,
+            LydianSharp2,
+            Altered_bb7,
+            // Other 7-note scales
+            HarmonicMajor,
+            DoubleHarmonicMajor,
+            HungarianMinor,
+            NeapolitanMajor,
+            NeapolitanMinor
         };
 
         /**
@@ -88,14 +114,75 @@ namespace MidiTools
             return notes;
         }
 
+        /** Returns an ordered list of names for all available scale types. */
+        static const juce::StringArray& getScaleTypeNames()
+        {
+            static const juce::StringArray names = {
+                // Major Scale Modes
+                "Major (Ionian)",
+                "Dorian",
+                "Phrygian",
+                "Lydian",
+                "Mixolydian",
+                "Aeolian",
+                "Locrian",
+                // Melodic Minor Modes
+                "Melodic Minor",
+                "Dorian b9",
+                "Lydian #5",
+                "Lydian b7 (Bartok)",
+                "Mixolydian b13",
+                "Locrian Natural 9",
+                "Altered",
+                // Harmonic Minor Modes
+                "Harmonic Minor",
+                "Locrian Natural 6",
+                "Ionian #5",
+                "Dorian #4",
+                "Phrygian Dominant",
+                "Lydian #2",
+                "Altered bb7 (Ultralocrian)",
+                // Other 7-note scales
+                "Harmonic Major",
+                "Double Harmonic Major",
+                "Hungarian Minor",
+                "Neapolitan Major",
+                "Neapolitan Minor"
+            };
+            return names;
+        }
+
     private:
         void buildScale(int rootSemitone, Type scaleType)
         {
             static const std::map<Type, juce::Array<int>> scaleIntervals = {
-                {Type::Major,         {0, 2, 4, 5, 7, 9, 11}},
-                {Type::MelodicMinor,  {0, 2, 3, 5, 7, 9, 11}},
-                {Type::HarmonicMinor, {0, 2, 3, 5, 7, 8, 11}},
-                {Type::Bartok,        {0, 2, 4, 6, 7, 9, 10}} // Lydian Dominant
+                {Type::Major,           {0, 2, 4, 5, 7, 9, 11}}, // Ionian
+                {Type::Dorian,          {0, 2, 3, 5, 7, 9, 10}},
+                {Type::Phrygian,        {0, 1, 3, 5, 7, 8, 10}},
+                {Type::Lydian,          {0, 2, 4, 6, 7, 9, 11}},
+                {Type::Mixolydian,      {0, 2, 4, 5, 7, 9, 10}},
+                {Type::Aeolian,         {0, 2, 3, 5, 7, 8, 10}},
+                {Type::Locrian,         {0, 1, 3, 5, 6, 8, 10}},
+                {Type::MelodicMinor,    {0, 2, 3, 5, 7, 9, 11}},
+                {Type::Dorianb9,        {0, 1, 3, 5, 7, 9, 10}},
+                {Type::LydianSharp5,    {0, 2, 4, 6, 8, 9, 11}},
+                {Type::Lydianb7,        {0, 2, 4, 6, 7, 9, 10}}, // Bartok / Lydian Dominant
+                {Type::Mixolydianb13,   {0, 2, 4, 5, 7, 8, 10}},
+                {Type::LocrianNatural9, {0, 2, 3, 5, 6, 8, 10}},
+                {Type::Altered,         {0, 1, 3, 4, 6, 8, 10}},
+                {Type::HarmonicMinor,   {0, 2, 3, 5, 7, 8, 11}},
+                {Type::LocrianNatural6, {0, 1, 3, 5, 6, 9, 10}},
+                {Type::IonianSharp5,    {0, 2, 4, 5, 8, 9, 11}},
+                {Type::DorianSharp4,    {0, 2, 3, 6, 7, 9, 10}},
+                {Type::PhrygianDominant,{0, 1, 4, 5, 7, 8, 10}},
+                {Type::LydianSharp2,    {0, 3, 4, 6, 7, 9, 11}},
+                {Type::Altered_bb7,     {0, 1, 3, 4, 6, 8, 9}},
+                // Other 7-note scales
+                {Type::HarmonicMajor,       {0, 2, 4, 5, 7, 8, 11}},
+                {Type::DoubleHarmonicMajor, {0, 1, 4, 5, 7, 8, 11}},
+                {Type::HungarianMinor,      {0, 2, 3, 6, 7, 8, 11}},
+                {Type::NeapolitanMajor,     {0, 1, 4, 5, 7, 9, 11}},
+                {Type::NeapolitanMinor,     {0, 1, 3, 5, 7, 8, 11}}
             };
 
             const auto& intervals = scaleIntervals.at(scaleType);

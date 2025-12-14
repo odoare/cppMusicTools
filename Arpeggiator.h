@@ -88,14 +88,6 @@ public:
     */
     juce::MidiBuffer processBlock(int numSamples)
     {
-        // std::cout << "In Arpeggiator::processBlock()" << std::endl;
-        // std::cout << "samplesPerNote = " << samplesPerNote << std::endl;        
-        // std::cout << "samplesUntilNextNote = " << samplesUntilNextNote << std::endl;
-
-        // std::cout << "numSamples = " << numSamples << std::endl;
-        // std::cout << "pattern = " << pattern << std::endl;
-        // std::cout << "sampleRate = " << sampleRate << std::endl;
-        
         juce::MidiBuffer generatedMidi;
         if (sampleRate <= 0.0 || samplesPerNote <= 0.0 || pattern.isEmpty())
             return generatedMidi;
@@ -161,16 +153,20 @@ private:
                 char octaveCommand = pattern[pos];
                 pos = (pos + 1) % pattern.length(); // Consume octave command
 
-                // Start with the current global octave to calculate the new value.
-                int targetOctave = octave;
+                // Determine the starting point for this calculation.
+                // If a local octave is already set for this step, use it. Otherwise, use the global octave.
+                int currentStepOctave = (localOctave != -1) ? localOctave : octave;
+                int targetOctave = currentStepOctave;
 
                 if (octaveCommand == '+')
-                    targetOctave = juce::jmin(7, octave + 1);
+                    targetOctave = juce::jmin(7, currentStepOctave + 1);
                 else if (octaveCommand == '-')
-                    targetOctave = juce::jmax(0, octave - 1);
+                    targetOctave = juce::jmax(0, currentStepOctave - 1);
                 else if (juce::CharacterFunctions::isDigit(octaveCommand))
                     targetOctave = octaveCommand - '0'; // Correctly convert char '0'-'7' to int 0-7
 
+                // For both 'o' and 'O', we first set the localOctave for the current step's parsing.
+                // If it's 'O', we'll also promote it to the global octave later.
                 if (command == 'o')
                     localOctave = targetOctave;
                 else // 'O'
@@ -584,6 +580,8 @@ private:
             case 5: return 6.0;  // 1/16T
             case 6: return 8.0;  // 1/32
             case 7: return 12.0; // 1/32T
+            case 8: return 16.0; // 1/64
+            case 9: return 24.0; // 1/64T
             default: return 4.0;
         }
     }
