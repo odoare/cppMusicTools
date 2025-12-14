@@ -110,7 +110,6 @@ public:
             time += samplesThisStep;
             samplesUntilNextNote -= samplesThisStep;
         }
-        // std::cout << "Num events = " << generatedMidi.getNumEvents() << std::endl;
         return generatedMidi;
     }
 
