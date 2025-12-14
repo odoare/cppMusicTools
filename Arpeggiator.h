@@ -321,6 +321,20 @@ public:
         octave = baseOctave; // Also reset the current octave to this new base.
     }
 
+    /**
+        Sets the global arpeggiator velocity based on an incoming MIDI note's velocity.
+        It converts the 0-127 MIDI velocity into an internal 1-8 level.
+        @param midiVelocity The velocity of the incoming MIDI note (1-127).
+    */
+    void setGlobalVelocityFromMidi(int midiVelocity)
+    {
+        if (midiVelocity > 0)
+        {
+            int velocityLevel = static_cast<int>(std::ceil(static_cast<float>(midiVelocity) / 16.0f));
+            velocityLevel = juce::jlimit(1, 8, velocityLevel); // Ensure it's within 1-8 range
+            globalVelocity = juce::jmin(127, velocityLevel * 16);
+        }
+    }
     /** Calculates the number of musical steps in the pattern string. */
     int numSteps() const
     {
