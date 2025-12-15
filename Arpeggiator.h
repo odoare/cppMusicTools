@@ -342,10 +342,22 @@ public:
         }
     }
 
+    /** Returns a const reference to the currently active chord. */
+    const MidiTools::Chord& getChord() const
+    {
+        return chord;
+    }
+
     /** Returns the index of the current musical step being played. */
     int getCurrentStepIndex() const
     {
         return currentStepIndex;
+    }
+
+    /** Returns the last MIDI note number that was played. */
+    int getLastPlayedNote() const
+    {
+        return lastPlayedMidiNote;
     }
     /** Calculates the number of musical steps in the pattern string. */
     int numSteps() const

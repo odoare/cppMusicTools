@@ -111,8 +111,7 @@ namespace MidiTools
         */
         Scale(int rootNoteNumber, Type scaleType)
         {
-            int rootSemitone = rootNoteNumber % 12;
-            buildScale(rootSemitone, scaleType);
+            buildScale(rootNoteNumber % 12, scaleType);
         }
 
         /** Returns a sorted array of 7 semitones (0-11) representing the notes in the scale. */
@@ -120,6 +119,11 @@ namespace MidiTools
         {
             return notes;
         }
+
+        int getRootNote() const { return rootNote; }
+        Type getType() const { return type; }
+
+        /** Returns an ordered list of names for all available scale types. */
 
         /** Returns an ordered list of names for all available scale types. */
         static const juce::StringArray& getScaleTypeNames()
@@ -169,6 +173,9 @@ namespace MidiTools
     private:
         void buildScale(int rootSemitone, Type scaleType)
         {
+            this->rootNote = rootSemitone;
+            this->type = scaleType;
+
             static const std::map<Type, juce::Array<int>> scaleIntervals = {
                 {Type::Major,           {0, 2, 4, 5, 7, 9, 11}}, // Ionian
                 {Type::Dorian,          {0, 2, 3, 5, 7, 9, 10}},
@@ -208,10 +215,13 @@ namespace MidiTools
 
             const auto& intervals = scaleIntervals.at(scaleType);
             for (int interval : intervals)
+                // notes.add((rootSemitone + interval) % 12);
                 notes.add((rootSemitone + interval) % 12);
         }
 
         juce::Array<int> notes; // Stores the 7 semitones of the scale (0-11).
+        int rootNote = 0;
+        Type type = Type::Major;
     };
 
     /**
