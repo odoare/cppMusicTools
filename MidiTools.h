@@ -77,7 +77,13 @@ namespace MidiTools
             DoubleHarmonicMajor,
             HungarianMinor,
             NeapolitanMajor,
-            NeapolitanMinor
+            NeapolitanMinor,
+            // Non-diatonic scales
+            MajorPentatonic,
+            MinorPentatonic,
+            Blues,
+            WholeTone,
+            OctatonicHalfWhole, // Diminished (Half-Whole)
         };
 
         /**
@@ -147,7 +153,13 @@ namespace MidiTools
                 "Double Harmonic Major",
                 "Hungarian Minor",
                 "Neapolitan Major",
-                "Neapolitan Minor"
+                "Neapolitan Minor",
+                // Non-diatonic scales
+                "Major Pentatonic",
+                "Minor Pentatonic",
+                "Blues",
+                "Whole Tone",
+                "Octatonic (Half-Whole)",
             };
             return names;
         }
@@ -182,7 +194,13 @@ namespace MidiTools
                 {Type::DoubleHarmonicMajor, {0, 1, 4, 5, 7, 8, 11}},
                 {Type::HungarianMinor,      {0, 2, 3, 6, 7, 8, 11}},
                 {Type::NeapolitanMajor,     {0, 1, 4, 5, 7, 9, 11}},
-                {Type::NeapolitanMinor,     {0, 1, 3, 5, 7, 8, 11}}
+                {Type::NeapolitanMinor,     {0, 1, 3, 5, 7, 8, 11}},
+                // Non-diatonic scales
+                {Type::MajorPentatonic,     {0, 2, 4, 7, 9}}, // 5 notes
+                {Type::MinorPentatonic,     {0, 3, 5, 7, 10}}, // 5 notes
+                {Type::Blues,               {0, 3, 5, 6, 7, 10}}, // 6 notes
+                {Type::WholeTone,           {0, 2, 4, 6, 8, 10}}, // 6 notes
+                {Type::OctatonicHalfWhole,  {0, 1, 3, 4, 6, 7, 9, 10}}, // 8 notes
             };
 
             const auto& intervals = scaleIntervals.at(scaleType);
@@ -363,21 +381,25 @@ namespace MidiTools
 
         /**
             Creates a new Chord by building a diatonic 7-note chord from a given scale and root degree.
-            This is used for the "Single Note" mode.
+            This is primarily used for the "Single Note" mode.
             @param scale The scale to pick notes from.
             @param degree The root degree within the scale (0-6) to build the chord on.
+            @param chordMode If true, builds a traditional chord by stacking thirds from the scale.
+                           If false (default), the chord's "degrees" will be populated with the
+                           notes of the scale in order, starting from the specified degree.
             @return A new Chord object containing the diatonic notes.
         */
-        static Chord fromScaleAndDegree(const Scale& scale, int degree)
+        static Chord fromScaleAndDegree(const Scale& scale, int degree, bool chordMode=false)
         {
             Chord newChord("Diatonic");
             const auto& scaleNotes = scale.getNotes();
-            if (scaleNotes.size() != 7)
-                return newChord; // Return empty chord if scale is invalid
+            if (scaleNotes.isEmpty())
+                return newChord; // Return empty chord if scale has no notes
 
-            degree = degree % 7; // Ensure degree is within bounds
+            int scaleSize = scaleNotes.size();
+            degree = degree % scaleSize; // Ensure degree is within bounds of the actual scale size
 
-            int fundamental = scaleNotes[(degree + 0) % 7];
+            int fundamental = scaleNotes[(degree + 0) % scaleSize];
             newChord.degrees.set(0, fundamental); // Fundamental
 
             auto getVoicedNote = [&](int interval) -> int
@@ -388,14 +410,30 @@ namespace MidiTools
                 return (note < fundamental) ? note + 12 : note;
             };
 
-            // Build the 7-note chord by stacking thirds from the scale
-            newChord.degrees.set(1, getVoicedNote(2)); // Third
-            newChord.degrees.set(2, getVoicedNote(4)); // Fifth
-            newChord.degrees.set(3, getVoicedNote(6)); // Seventh
-            newChord.degrees.set(4, getVoicedNote(1)); // Ninth (is the 2nd degree)
-            newChord.degrees.set(5, getVoicedNote(3)); // Eleventh (is the 4th degree)
-            newChord.degrees.set(6, getVoicedNote(5)); // Thirteenth (is the 6th degree)
-
+            if (chordMode)
+            {
+                // Build the 7-note chord by stacking thirds from the scale
+                // The interval indices (2, 4, 6, 1, 3, 5) refer to diatonic steps.
+                // We map these to the actual scale size.
+                newChord.degrees.set(1, getVoicedNote(2)); // Third (2 steps in the scale)
+                newChord.degrees.set(2, getVoicedNote(4)); // Fifth (4 steps in the scale)
+                newChord.degrees.set(3, getVoicedNote(6)); // Seventh (6 steps in the scale)
+                newChord.degrees.set(4, getVoicedNote(1)); // Ninth (1 step in the scale, but diatonic 9th is 2nd note)
+                newChord.degrees.set(5, getVoicedNote(3)); // Eleventh (3 steps in the scale, but diatonic 11th is 4th note)
+                newChord.degrees.set(6, getVoicedNote(5)); // Thirteenth (5 steps in the scale, but diatonic 13th is 6th note)
+            }
+            else
+            {
+                // Populate the chord's degrees with notes from the scale, starting from 'degree',
+                // and wrapping around the scale's actual size.
+                for (int i = 0; i < 7; ++i) // Fill up to 7 degrees
+                {
+                    int noteInScale = scaleNotes[(degree + i) % scaleSize];
+                    if (noteInScale < fundamental)
+                        noteInScale += 12;
+                    newChord.degrees.set(i, noteInScale);
+                }
+            }
             return newChord;
         }
 
