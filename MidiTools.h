@@ -84,6 +84,7 @@ namespace MidiTools
             Blues,
             WholeTone,
             OctatonicHalfWhole, // Diminished (Half-Whole)
+            OctatonicWholeHalf,
         };
 
         /**
@@ -160,6 +161,7 @@ namespace MidiTools
                 "Blues",
                 "Whole Tone",
                 "Octatonic (Half-Whole)",
+                "Octatonic (Whole-Half)",
             };
             return names;
         }
@@ -201,6 +203,7 @@ namespace MidiTools
                 {Type::Blues,               {0, 3, 5, 6, 7, 10}}, // 6 notes
                 {Type::WholeTone,           {0, 2, 4, 6, 8, 10}}, // 6 notes
                 {Type::OctatonicHalfWhole,  {0, 1, 3, 4, 6, 7, 9, 10}}, // 8 notes
+                {Type::OctatonicWholeHalf,  {0, 2, 3, 5, 6, 8, 9, 11}}, // 8 notes
             };
 
             const auto& intervals = scaleIntervals.at(scaleType);
@@ -404,13 +407,13 @@ namespace MidiTools
 
             auto getVoicedNote = [&](int interval) -> int
             {
-                int note = scaleNotes[(degree + interval) % 7];
+                int note = scaleNotes[(degree + interval) % scaleSize];
                 // If the note is lower than the fundamental, transpose it up an octave
                 // to ensure the fundamental is the lowest note in the chord voicing.
                 return (note < fundamental) ? note + 12 : note;
             };
 
-            if (chordMode)
+            if (chordMode && scaleSize == 7) // Stacking thirds only makes sense for 7-note scales
             {
                 // Build the 7-note chord by stacking thirds from the scale
                 // The interval indices (2, 4, 6, 1, 3, 5) refer to diatonic steps.
@@ -424,14 +427,13 @@ namespace MidiTools
             }
             else
             {
-                // Populate the chord's degrees with notes from the scale, starting from 'degree',
-                // and wrapping around the scale's actual size.
-                for (int i = 0; i < 7; ++i) // Fill up to 7 degrees
+                // The chord's "degrees" will simply be the notes of the scale, voiced above the fundamental.
+                newChord.degrees.clear();
+                for (int i = 0; i < scaleSize; ++i)
                 {
                     int noteInScale = scaleNotes[(degree + i) % scaleSize];
-                    if (noteInScale < fundamental)
-                        noteInScale += 12;
-                    newChord.degrees.set(i, noteInScale);
+                    int voicedNote = (noteInScale < fundamental) ? noteInScale + 12 : noteInScale;
+                    newChord.degrees.add(voicedNote);
                 }
             }
             return newChord;

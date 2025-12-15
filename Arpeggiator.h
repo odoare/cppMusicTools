@@ -20,7 +20,7 @@
     a sequence of MIDI notes. The getNext() method processes the pattern
     and returns MIDI messages for note-on and note-off events.
 
-    The pattern string consists of characters that define the arpeggio's behavior at each step:
+    The pattern string consists of characters that define the arpeggio's behavior at each step: 
     - '0' to '6': Plays a specific degree of the chord/scale (0=fundamental, 1=third, ..., 6=thirteenth).
       - The `playNoteOff` property determines behavior for absent degrees ("Off", "Next", "Previous").
     - '_': Sustains the previously played note.
@@ -211,8 +211,12 @@ private:
                 // Handle other note commands
                 switch (command)
                 {
-                    case '+': currentDegreeIndex = (currentDegreeIndex + 1) % 7; noteCommandFound = true; break;
-                    case '-': currentDegreeIndex = (currentDegreeIndex + 6) % 7; noteCommandFound = true; break;
+                    case '+':
+                        currentDegreeIndex = (currentDegreeIndex + 1) % chord.getDegrees().size();
+                        noteCommandFound = true; break;
+                    case '-':
+                        currentDegreeIndex = (currentDegreeIndex + chord.getDegrees().size() - 1) % chord.getDegrees().size();
+                        noteCommandFound = true; break;
                     case '?': currentDegreeIndex = getRandomPresentDegree(); noteCommandFound = true; break;
                     case '=': // Fall-through
                     case '"': /* currentDegreeIndex remains the same */ noteCommandFound = true; break;
@@ -555,8 +559,11 @@ protected:
         }
         else // "Notes played" (mode 0) and "Single note" (mode 2)
         {
-            if (!juce::isPositiveAndBelow(degreeIndex, 7))
+            const auto& degrees = chord.getDegrees();
+            if (degrees.isEmpty())
                 return -1;
+            if (!juce::isPositiveAndBelow(degreeIndex, degrees.size()))
+                degreeIndex %= degrees.size(); // Wrap around if degree is > scale size
 
             // If we are using a "Custom" chord from played notes, we should loop within the number of notes played.
             if (chord.getName() == "Custom")
@@ -583,17 +590,17 @@ protected:
             }
             else if (playNoteOff == "Next")
             {
-                for (int i = 1; i < 7; ++i)
+                for (int i = 1; i < degrees.size(); ++i)
                 {
-                    semitone = chord.getDegree((degreeIndex + i) % 7);
+                    semitone = chord.getDegree((degreeIndex + i) % degrees.size());
                     if (semitone != -1) return semitone;
                 }
             }
             else if (playNoteOff == "Previous")
             {
-                for (int i = 1; i < 7; ++i)
+                for (int i = 1; i < degrees.size(); ++i)
                 {
-                    semitone = chord.getDegree((degreeIndex + 7 - i) % 7);
+                    semitone = chord.getDegree((degreeIndex + degrees.size() - i) % degrees.size());
                     if (semitone != -1) return semitone;
                 }
             }
@@ -610,9 +617,10 @@ protected:
     int getRandomPresentDegree()
     {
         juce::Array<int> presentDegrees;
-        for (int i = 0; i < 7; ++i)
+        const auto& degrees = chord.getDegrees();
+        for (int i = 0; i < degrees.size(); ++i)
         {
-            if (chord.getDegree(i) != -1)
+            if (degrees[i] != -1)
                 presentDegrees.add(i);
         }
 
