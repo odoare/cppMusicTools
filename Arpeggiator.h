@@ -21,13 +21,13 @@
     and returns MIDI messages for note-on and note-off events.
 
     The pattern string consists of characters that define the arpeggio's behavior at each step:
-    - '0' to '6': Plays a specific degree of the chord (0=fundamental, 1=third, ..., 6=thirteenth).
+    - '0' to '6': Plays a specific degree of the chord/scale (0=fundamental, 1=third, ..., 6=thirteenth).
       - The `playNoteOff` property determines behavior for absent degrees ("Off", "Next", "Previous").
     - '_': Sustains the previously played note.
     - '.': A rest; no note is played.
     - '+': Plays the next degree in the chord (e.g., from 1 to 2).
     - '-': Plays the previous degree in the chord (e.g., from 2 to 1).
-    - '*': Plays a random, valid note from the current chord.
+    - '?': Plays a random, valid note from the current chord.
     - '"' or '=': Repeats the last played degree.
     - '#' (Sharp): Pitches the next note up by one semitone. This is a local effect. Example: "#0"
     - 'b' (Flat): Pitches the next note down by one semitone. This is a local effect. Example: "b0"
@@ -213,7 +213,7 @@ private:
                 {
                     case '+': currentDegreeIndex = (currentDegreeIndex + 1) % 7; noteCommandFound = true; break;
                     case '-': currentDegreeIndex = (currentDegreeIndex + 6) % 7; noteCommandFound = true; break;
-                    case '*': currentDegreeIndex = getRandomPresentDegree(); noteCommandFound = true; break;
+                    case '?': currentDegreeIndex = getRandomPresentDegree(); noteCommandFound = true; break;
                     case '=': // Fall-through
                     case '"': /* currentDegreeIndex remains the same */ noteCommandFound = true; break;
                     case '.': currentDegreeIndex = -1; noteCommandFound = true; break;
@@ -363,7 +363,7 @@ public:
                 i++; // Skip sharp/flat prefix
             }
             else if (juce::CharacterFunctions::isDigit(command) || command == '+' ||
-                     command == '-' || command == '*' || command == '"' ||
+                     command == '-' || command == '?' || command == '"' ||
                      command == '=' || command == '.' || command == '_')
             {
                 steps++; // This is a valid step command
@@ -400,7 +400,7 @@ public:
                 i++; // Skip sharp/flat prefix
             }
             else if (juce::CharacterFunctions::isDigit(command) || command == '+' ||
-                     command == '-' || command == '*' || command == '"' ||
+                     command == '-' || command == '?' || command == '"' ||
                      command == '=' || command == '.' || command == '_')
             {
                 currentStepCount++;
@@ -434,7 +434,7 @@ public:
                 i++; // Skip prefix
             }
             else if (juce::CharacterFunctions::isDigit(command) || command == '+' ||
-                     command == '-' || command == '*' || command == '"' ||
+                     command == '-' || command == '?' || command == '"' ||
                      command == '=' || command == '.' || command == '_')
             {
                 stepCount++;
@@ -604,7 +604,8 @@ protected:
     }
 
     /**
-        Selects a random degree index that is actually present in the chord.
+        Selects a random degree index that is actually present in the chord, for use with the '?' command.
+        @return A valid degree index (0-6), or -1 if the chord is empty.
     */
     int getRandomPresentDegree()
     {
