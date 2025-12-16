@@ -85,19 +85,20 @@ public:
         Generates MIDI events for the current block of audio samples.
         @param numSamples The number of samples in the current audio block.
         @return A juce::MidiBuffer containing any events generated during this block.
-    */
-    juce::MidiBuffer processBlock(int numSamples)
+    */    
+    juce::MidiBuffer processBlock(int numSamples, int midiChannel = 1)
     {
         juce::MidiBuffer generatedMidi;
         if (sampleRate <= 0.0 || samplesPerNote <= 0.0 || pattern.isEmpty())
             return generatedMidi;
+        if (midiChannel < 1 || midiChannel > 16) midiChannel = 1;
 
         int time = 0;
         while (time < numSamples)
         {
             if (samplesUntilNextNote <= 0.0)
             {
-                generatedMidi.addEvents(getNext(), 0, -1, time);
+                generatedMidi.addEvents(getNext(midiChannel), 0, -1, time);
                 // Use 'while' to handle cases where the block size is larger than the note duration.
                 while (samplesUntilNextNote <= 0.0)
                     samplesUntilNextNote += samplesPerNote;
@@ -118,7 +119,7 @@ private:
         Processes the next step in the arpeggio pattern and returns MIDI messages.
         @return A juce::MidiBuffer containing note-on and/or note-off messages.
     */
-    juce::MidiBuffer getNext()
+    juce::MidiBuffer getNext(int midiChannel)
     {
         juce::MidiBuffer midiBuffer;
         int samplePosition = 0; // All events happen at the start of the block
@@ -231,7 +232,7 @@ private:
         // This now happens *after* we've decided what the next command is.
         if (lastPlayedMidiNote != -1)
         {
-            midiBuffer.addEvent(juce::MidiMessage::noteOff(1, lastPlayedMidiNote), samplePosition);
+            midiBuffer.addEvent(juce::MidiMessage::noteOff(lastPlayedMidiChannel, lastPlayedMidiNote), samplePosition);
             lastPlayedMidiNote = -1;
         }
 
@@ -268,8 +269,9 @@ private:
 
             // Use local velocity if set, otherwise use global velocity.
             juce::uint8 velocityToUse = (localVelocity != -1) ? (juce::uint8)localVelocity : (juce::uint8)globalVelocity;
-            midiBuffer.addEvent(juce::MidiMessage::noteOn(1, noteToPlay, velocityToUse), samplePosition);
+            midiBuffer.addEvent(juce::MidiMessage::noteOn(midiChannel, noteToPlay, velocityToUse), samplePosition);
             lastPlayedMidiNote = noteToPlay;
+            lastPlayedMidiChannel = midiChannel;
             lastPlayedDegreeIndex = currentDegreeIndex;
         }
 
@@ -503,12 +505,12 @@ public:
     }
 
     /** Resets the arpeggiator's position to the beginning of the pattern. */
-    juce::MidiBuffer reset(const juce::Optional<juce::AudioPlayHead::CurrentPositionInfo> positionInfo = {})
+    juce::MidiBuffer reset(int midiChannel = 1, const juce::Optional<juce::AudioPlayHead::CurrentPositionInfo> positionInfo = {})
     {
         juce::MidiBuffer noteOffBuffer;
         if (lastPlayedMidiNote != -1)
         {
-            noteOffBuffer.addEvent(juce::MidiMessage::noteOff(1, lastPlayedMidiNote), 0);
+            noteOffBuffer.addEvent(juce::MidiMessage::noteOff(lastPlayedMidiChannel, lastPlayedMidiNote), 0);
             lastPlayedMidiNote = -1;
         }
 
@@ -537,12 +539,12 @@ public:
     }
 
     /** Generates a note-off for the last played note and resets the state. */
-    juce::MidiBuffer turnOff()
+    juce::MidiBuffer turnOff(int midiChannel = 1)
     {
         juce::MidiBuffer noteOffBuffer;
         if (lastPlayedMidiNote != -1)
         {
-            noteOffBuffer.addEvent(juce::MidiMessage::noteOff(1, lastPlayedMidiNote), 0);
+            noteOffBuffer.addEvent(juce::MidiMessage::noteOff(lastPlayedMidiChannel, lastPlayedMidiNote), 0);
             lastPlayedMidiNote = -1;
         }
         // Also reset pattern position and other state variables for a clean start next time.
@@ -652,6 +654,7 @@ protected:
 
     int pos = 0;
     int lastPlayedMidiNote = -1;
+    int lastPlayedMidiChannel = 1;
     int lastPlayedDegreeIndex = 0;
     int currentStepIndex = 0;
 
