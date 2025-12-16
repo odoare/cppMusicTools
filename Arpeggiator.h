@@ -285,6 +285,19 @@ private:
 
         return midiBuffer;
     }
+
+public:
+    /** Returns the number of samples remaining until the next note event. */
+    double getSamplesUntilNextNote() const
+    {
+        return samplesUntilNextNote;
+    }
+
+    /** Sets the number of samples remaining until the next note event. */
+    void setSamplesUntilNextNote(double samples)
+    {
+        samplesUntilNextNote = samples;
+    }
 public:
     // --- Setters for properties ---
     void setChord(const MidiTools::Chord& newChord)
