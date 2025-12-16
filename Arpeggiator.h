@@ -204,7 +204,12 @@ private:
             }
             else if (juce::CharacterFunctions::isDigit(command))
             {
-                currentDegreeIndex = command - '0';
+                // Convert 1-indexed pattern digit to 0-indexed internal degree.
+                // '1' -> 0, '2' -> 1, etc. '0' is not a valid note.
+                int degreeValue = command - '0';
+                if (degreeValue > 0)
+                    currentDegreeIndex = degreeValue - 1;
+
                 noteCommandFound = true;
             }
             else

@@ -23,8 +23,8 @@ The `processBlock()` method should be called from your audio processing loop. It
 The pattern string consists of characters that define the arpeggio's behavior at each step:
 
 - **`0` to `6`**: Plays a specific degree of the chord (0=fundamental, 1=third, ..., 6=thirteenth).
-  - The behavior for absent degrees can be configured ("Off", "Next", "Previous").
 - **`_`**: Sustains the previously played note.
+- **`1` to `9`**: Plays a specific degree of the chord (1=fundamental, 2=second, ..., 7=seventh).
 - **`.`**: A rest; no note is played.
 - **`+`**: Plays the next degree in the chord (loops from 6 to 0).
 - **`-`**: Plays the previous degree in the chord (loops from 0 to 6).
@@ -40,4 +40,3 @@ Octave modifiers are prefixed to a note command to change the octave for that st
 - **`oN`**: Sets the octave to `N` (where `N` is a digit from 0-7). Example: `"o30"` sets the octave to 3 and plays the root.
 - **`o+`**: Increases the octave by one. Example: `"o+0"` plays the root one octave higher.
 - **`o-`**: Decreases the octave by one. Example: `"o-0"` plays the root one octave lower.
-
