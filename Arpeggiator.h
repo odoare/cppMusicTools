@@ -654,6 +654,13 @@ protected:
     */
     int getRandomPresentDegree()
     {
+        if (chordMethod == 1)
+        {
+            if (chord.getRawNotes().isEmpty())
+                return -1;
+            return juce::Random::getSystemRandom().nextInt(chord.getRawNotes().size());
+        }
+
         juce::Array<int> presentDegrees;
         const auto& degrees = chord.getDegrees();
         for (int i = 0; i < degrees.size(); ++i)
