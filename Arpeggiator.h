@@ -21,7 +21,7 @@
     and returns MIDI messages for note-on and note-off events.
 
     The pattern string consists of characters that define the arpeggio's behavior at each step: 
-    - '0' to '6': Plays a specific degree of the chord/scale (0=fundamental, 1=third, ..., 6=thirteenth).
+    - '1' to '7': Plays a specific degree of the chord/scale (1=fundamental, 2=2nd, ..., 6=sixth).
       - The `playNoteOff` property determines behavior for absent degrees ("Off", "Next", "Previous").
     - '_': Sustains the previously played note.
     - '.': A rest; no note is played.
@@ -135,6 +135,7 @@ private:
         int localVelocity = -1; // For local velocity modifier
         int localOctave = -1;   // For local octave modifier
         bool noteCommandFound = false;
+        bool shouldUpdateLastDegree = true;
         
         // This outer loop ensures we will always find a note command, even if we have to
         // wrap around the pattern string after processing prefixes at the end.
@@ -223,7 +224,16 @@ private:
                     case '-':
                         currentDegreeIndex = (currentDegreeIndex + chord.getDegrees().size() - 1) % chord.getDegrees().size();
                         noteCommandFound = true; break;
-                    case '?': currentDegreeIndex = getRandomPresentDegree(); noteCommandFound = true; break;
+                    case '?': 
+                        currentDegreeIndex = getRandomPresentDegree(); 
+                        noteCommandFound = true;
+                        // There are two possible behaviours
+                        // 1. The last played degree is updated by a '?' command,
+                        //    then it is taken ito account by '+' or '-'
+                        // 2. The last played degree is not updated by a '?' command
+                        // We choose option 1 for now
+                        // shouldUpdateLastDegree = false; 
+                        break;
                     case '=': // Fall-through
                     case '"': /* currentDegreeIndex remains the same */ noteCommandFound = true; break;
                     case '.': currentDegreeIndex = -1; noteCommandFound = true; break;
@@ -277,7 +287,8 @@ private:
             midiBuffer.addEvent(juce::MidiMessage::noteOn(midiChannel, noteToPlay, velocityToUse), samplePosition);
             lastPlayedMidiNote = noteToPlay;
             lastPlayedMidiChannel = midiChannel;
-            lastPlayedDegreeIndex = currentDegreeIndex;
+            if (shouldUpdateLastDegree)
+                lastPlayedDegreeIndex = currentDegreeIndex;
         }
 
         // std::cout << "     noteToplay = " << noteToPlay << std::endl;
@@ -303,11 +314,6 @@ public:
     void setChord(const MidiTools::Chord& newChord)
     {
         chord = newChord;
-        for (int i : chord.getDegrees())
-        {
-            std::cout << i << "   ";
-        }
-        std::cout << std::endl;
     }
     void setPattern(const juce::String& newPattern)
     {
