@@ -348,9 +348,13 @@ public:
     void setBaseOctaveFromNote(int midiNoteNumber)
     {
         // MIDI note 60 (C4) is in octave 4. (60 / 12) - 1 = 4.
-        int newOctave = (midiNoteNumber / 12) - 1;
-        baseOctave = juce::jlimit(0, 7, newOctave);
-        octave = baseOctave; // Also reset the current octave to this new base.
+        int newBaseOctave = (midiNoteNumber / 12) - 1;
+        newBaseOctave = juce::jlimit(0, 7, newBaseOctave);
+
+        int diff = newBaseOctave - baseOctave;
+        baseOctave = newBaseOctave;
+        // Adjust the current octave by the difference to maintain relative shifts
+        octave = juce::jlimit(0, 7, octave + diff);
     }
 
     /**
