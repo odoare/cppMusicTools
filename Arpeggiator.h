@@ -372,6 +372,97 @@ public:
         }
     }
 
+    /**
+        Generates a new random pattern string.
+        Rules:
+        - It shouldn't start with a "_"
+        - Balanced global relative modifiers (O+, V+, O-, V-) to prevent drift.
+        - Note values between 1 and 9.
+    */
+    void randomize()
+    {
+        juce::Random& rng = juce::Random::getSystemRandom();
+        int length = rng.nextInt(13) + 4; // Random length between 4 and 16
+
+        struct Step {
+            juce::String prefixes;
+            juce::String note;
+        };
+        juce::Array<Step> steps;
+
+        for (int i = 0; i < length; ++i)
+        {
+            Step s;
+            int r = rng.nextInt(100);
+
+            if (i == 0)
+            {
+                // First step: ensure it's not a sustain ('_') or rest ('.') for a strong start
+                if (r < 60) s.note = juce::String(rng.nextInt(5) + 1); // Start with 1-5
+                else if (r < 80) s.note = "+";
+                else s.note = "?";
+            }
+            else
+            {
+                if (r < 40) s.note = juce::String(rng.nextInt(9) + 1); // 1-9
+                else if (r < 55) s.note = "_";
+                else if (r < 65) s.note = ".";
+                else if (r < 75) s.note = "+";
+                else if (r < 85) s.note = "-";
+                else if (r < 90) s.note = "?";
+                else s.note = "=";
+            }
+            steps.add(s);
+        }
+
+        // Add Local Modifiers
+        for (auto& s : steps)
+        {
+            if (s.note == "_" || s.note == ".") continue;
+
+            // Local Octave
+            if (rng.nextFloat() < 0.15f)
+            {
+                float r2 = rng.nextFloat();
+                if (r2 < 0.4f) s.prefixes += "o+";
+                else if (r2 < 0.8f) s.prefixes += "o-";
+                else s.prefixes += "o" + juce::String(rng.nextInt(3) + 3); // o3-o5
+            }
+            
+            // Local Pitch
+            if (rng.nextFloat() < 0.1f)
+                s.prefixes += (rng.nextBool() ? "#" : "b");
+
+            // Local Velocity
+            if (rng.nextFloat() < 0.1f)
+                s.prefixes += "v" + juce::String(rng.nextInt(4) + 5); // v5-v8
+        }
+
+        // Add Global Modifiers (Balanced)
+        auto addBalancedGlobal = [&](juce::String plus, juce::String minus) {
+            int idx1 = rng.nextInt(length);
+            int idx2 = rng.nextInt(length);
+            while (idx1 == idx2) idx2 = rng.nextInt(length);
+            steps.getReference(idx1).prefixes += plus;
+            steps.getReference(idx2).prefixes += minus;
+        };
+
+        if (rng.nextFloat() < 0.3f) addBalancedGlobal("O+", "O-");
+        if (rng.nextFloat() < 0.3f) addBalancedGlobal("V+", "V-");
+
+        juce::String newPattern;
+        for (const auto& s : steps)
+            newPattern += s.prefixes + s.note + " ";
+
+        setPattern(newPattern.trim());
+    }
+
+    /** Returns the current pattern string. */
+    const juce::String& getPattern() const
+    {
+        return pattern;
+    }
+
     /** Returns a const reference to the currently active chord. */
     const MidiTools::Chord& getChord() const
     {
