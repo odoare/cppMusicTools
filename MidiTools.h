@@ -802,4 +802,24 @@ namespace MidiTools
         juce::String frenchRoot = getFrenchNoteName(rootNoteStr);
         return frenchRoot.isNotEmpty() ? frenchRoot + suffix : standardChordName;
     }
+
+    /**
+        Generates a Euclidean rhythm using a Bresenham-based algorithm.
+        This distributes 'hits' pulses as evenly as possible over 'steps'.
+        @param hits The number of active steps (pulses).
+        @param steps The total number of steps.
+        @return A juce::Array<bool> where true represents a hit and false a rest.
+    */
+    static juce::Array<bool> euclidianRythm(int hits, int steps)
+    {
+        juce::Array<bool> pattern;
+        if (steps <= 0) return pattern;
+        
+        hits = juce::jlimit(0, steps, hits);
+
+        for (int i = 0; i < steps; ++i)
+            pattern.add(((i * hits) % steps) < hits);
+
+        return pattern;
+    }
 }

@@ -373,13 +373,27 @@ public:
     }
 
     /**
-        Generates a new random pattern string.
+        Generates a Euclidean pattern string.
+        @param hits Number of notes.
+        @param steps Total length of the sequence.
+    */
+    juce::String makeEuclidianPattern(int hits, int steps)
+    {
+        auto bools = MidiTools::euclidianRythm(hits, steps);
+        juce::String s;
+        for (bool b : bools)
+            s += (b ? "1 " : ". ");
+        return s.trim();
+    }
+
+    /**
+        Generates a random pattern string without applying it.
         Rules:
         - It shouldn't start with a "_"
         - Balanced global relative modifiers (O+, V+, O-, V-) to prevent drift.
         - Note values between 1 and 9.
     */
-    void randomize()
+    juce::String makeRandomPattern()
     {
         juce::Random& rng = juce::Random::getSystemRandom();
         int length = rng.nextInt(13) + 4; // Random length between 4 and 16
@@ -454,7 +468,12 @@ public:
         for (const auto& s : steps)
             newPattern += s.prefixes + s.note + " ";
 
-        setPattern(newPattern.trim());
+        return newPattern.trim();
+    }
+
+    void randomize()
+    {
+        setPattern(makeRandomPattern());
     }
 
     /** Returns the current pattern string. */
