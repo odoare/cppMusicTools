@@ -810,7 +810,7 @@ namespace MidiTools
         @param steps The total number of steps.
         @return A juce::Array<bool> where true represents a hit and false a rest.
     */
-    static juce::Array<bool> euclidianRythm(int hits, int steps)
+    static juce::Array<bool> euclidianRythm(int hits, int steps, int rotation = 0)
     {
         juce::Array<bool> pattern;
         if (steps <= 0) return pattern;
@@ -818,7 +818,11 @@ namespace MidiTools
         hits = juce::jlimit(0, steps, hits);
 
         for (int i = 0; i < steps; ++i)
-            pattern.add(((i * hits) % steps) < hits);
+        {
+            int index = (i - rotation) % steps;
+            if (index < 0) index += steps;
+            pattern.add(((index * hits) % steps) < hits);
+        }
 
         return pattern;
     }

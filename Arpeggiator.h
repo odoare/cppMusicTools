@@ -377,9 +377,9 @@ public:
         @param hits Number of notes.
         @param steps Total length of the sequence.
     */
-    juce::String makeEuclidianPattern(int hits, int steps)
+    juce::String makeEuclidianPattern(int hits, int steps, int rotation)
     {
-        auto bools = MidiTools::euclidianRythm(hits, steps);
+        auto bools = MidiTools::euclidianRythm(hits, steps, rotation);
         juce::String s;
         for (bool b : bools)
             s += (b ? "1 " : ". ");
